@@ -1,18 +1,22 @@
-export const SECRET_STORE_NAMESPACE = 'dotenvx-keychain';
+export const SECRET_STORE_NAMESPACE = "dotenvx-keychain";
 
 export type SecretStoreErrorCode =
-  | 'unsupported-platform'
-  | 'backend-unavailable'
-  | 'backend-io-error'
-  | 'enumeration-failed'
-  | 'remove-failed';
+  | "unsupported-platform"
+  | "backend-unavailable"
+  | "backend-io-error"
+  | "enumeration-failed"
+  | "remove-failed";
 
 export class SecretStoreError extends Error {
   public readonly code: SecretStoreErrorCode;
 
-  public constructor(code: SecretStoreErrorCode, message: string, cause?: unknown) {
+  public constructor(
+    code: SecretStoreErrorCode,
+    message: string,
+    cause?: unknown,
+  ) {
     super(message, { cause });
-    this.name = 'SecretStoreError';
+    this.name = "SecretStoreError";
     this.code = code;
   }
 }
@@ -34,7 +38,11 @@ export interface SecretStoreCredential {
 }
 
 export interface KeytarLike {
-  setPassword(service: string, account: string, password: string): Promise<void>;
+  setPassword(
+    service: string,
+    account: string,
+    password: string,
+  ): Promise<void>;
   getPassword(service: string, account: string): Promise<string | null>;
   deletePassword(service: string, account: string): Promise<boolean>;
   findCredentials(service: string): Promise<SecretStoreCredential[]>;

@@ -37,7 +37,9 @@ export async function listCommand(
   let store;
 
   try {
-    store = await (dependencies.secretStoreFactory ?? defaultSecretStoreFactory).create();
+    store = await (
+      dependencies.secretStoreFactory ?? defaultSecretStoreFactory
+    ).create();
   } catch (error) {
     stderr(formatSecretStoreError(error));
     return CLI_EXIT_CODE.infrastructure;

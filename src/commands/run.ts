@@ -65,7 +65,8 @@ export async function runCommand(
   const cwd = dependencies.cwd ?? process.cwd();
   const env = dependencies.env ?? process.env;
   const stderr = dependencies.stderr ?? console.error;
-  const resolveBinary = dependencies.resolveDotenvxBinary ?? resolveDotenvxBinary;
+  const resolveBinary =
+    dependencies.resolveDotenvxBinary ?? resolveDotenvxBinary;
   const runProcess = dependencies.runProcess ?? defaultRunInheritedProcess;
   const determineWindowsShell =
     dependencies.determineWindowsShell ?? shouldUseWindowsShell;
@@ -104,7 +105,9 @@ export async function runCommand(
     let store;
 
     try {
-      store = await (dependencies.secretStoreFactory ?? defaultSecretStoreFactory).create();
+      store = await (
+        dependencies.secretStoreFactory ?? defaultSecretStoreFactory
+      ).create();
     } catch (error) {
       stderr(formatSecretStoreError(error));
       return CLI_EXIT_CODE.infrastructure;

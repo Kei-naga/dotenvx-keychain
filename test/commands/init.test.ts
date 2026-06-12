@@ -46,9 +46,9 @@ function createDotenvxAdapter(
 
 afterEach(async () => {
   await Promise.all(
-    tempDirectories.splice(0).map((directory) =>
-      rm(directory, { recursive: true, force: true }),
-    ),
+    tempDirectories
+      .splice(0)
+      .map((directory) => rm(directory, { recursive: true, force: true })),
   );
 });
 
@@ -78,9 +78,9 @@ describe("initCommand", () => {
     expect(exitCode).toBe(0);
     expect(adapterCalls).toBe(0);
     expect(output.stderr).toEqual([]);
-    await expect(readFile(path.join(directory, CONFIG_FILE_NAME), "utf8")).resolves.toBe(
-      '{\n  "id": "app-a"\n}\n',
-    );
+    await expect(
+      readFile(path.join(directory, CONFIG_FILE_NAME), "utf8"),
+    ).resolves.toBe('{\n  "id": "app-a"\n}\n');
   });
 
   it("stores the parent DOTENV_PRIVATE_KEY when the store is empty", async () => {
@@ -132,9 +132,9 @@ describe("initCommand", () => {
 
     expect(exitCode).toBe(0);
     await expect(store.get("app-a")).resolves.toBe("from-local-dotenvx");
-    await expect(readFile(path.join(directory, CONFIG_FILE_NAME), "utf8")).resolves.toBe(
-      '{\n  "id": "app-a"\n}\n',
-    );
+    await expect(
+      readFile(path.join(directory, CONFIG_FILE_NAME), "utf8"),
+    ).resolves.toBe('{\n  "id": "app-a"\n}\n');
     await expect(readFile(envKeysPath, "utf8")).rejects.toBeTruthy();
   });
 
@@ -164,7 +164,9 @@ describe("initCommand", () => {
 
     expect(exitCode).toBe(4);
     await expect(store.get("app-a")).resolves.toBeNull();
-    expect(output.stderr).toContain("Failed to write config: .dotenvx-keychain");
+    expect(output.stderr).toContain(
+      "Failed to write config: .dotenvx-keychain",
+    );
   });
 
   it("returns exit 5 when removing .env.keys fails after success", async () => {

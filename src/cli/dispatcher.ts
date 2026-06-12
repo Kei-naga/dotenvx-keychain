@@ -1,11 +1,15 @@
 import { parseCliArgs } from "./parseArgs.js";
 import { initCommand, type InitCommandDependencies } from "../commands/init.js";
 import { listCommand, type ListCommandDependencies } from "../commands/list.js";
-import { removeCommand, type RemoveCommandDependencies } from "../commands/remove.js";
+import {
+  removeCommand,
+  type RemoveCommandDependencies,
+} from "../commands/remove.js";
 import { runCommand, type RunCommandDependencies } from "../commands/run.js";
 
 export interface DispatchDependencies
-  extends InitCommandDependencies,
+  extends
+    InitCommandDependencies,
     RunCommandDependencies,
     ListCommandDependencies,
     RemoveCommandDependencies {}
@@ -59,4 +63,3 @@ export async function dispatch(
   }
   return 4;
 }
-

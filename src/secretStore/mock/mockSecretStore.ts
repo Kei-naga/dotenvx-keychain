@@ -1,4 +1,4 @@
-import type { SecretStore } from '../interface.js';
+import type { SecretStore } from "../interface.js";
 
 export class MockSecretStore implements SecretStore {
   private readonly entries: Map<string, string>;

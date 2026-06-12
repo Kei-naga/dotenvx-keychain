@@ -19,9 +19,9 @@ async function createTempDirectory(): Promise<string> {
 
 afterEach(async () => {
   await Promise.all(
-    tempDirectories.splice(0).map((directory) =>
-      rm(directory, { recursive: true, force: true }),
-    ),
+    tempDirectories
+      .splice(0)
+      .map((directory) => rm(directory, { recursive: true, force: true })),
   );
 });
 
@@ -123,7 +123,11 @@ describe("runCommand", () => {
     const directory = await createTempDirectory();
     const output: string[] = [];
 
-    await writeFile(path.join(directory, ".dotenvx-keychain"), "{bad json", "utf8");
+    await writeFile(
+      path.join(directory, ".dotenvx-keychain"),
+      "{bad json",
+      "utf8",
+    );
 
     const exitCode = await runCommand(
       { command: "node", args: ["app.js"] },

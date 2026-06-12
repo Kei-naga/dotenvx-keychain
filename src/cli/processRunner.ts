@@ -55,7 +55,12 @@ function withCandidateExtensions(
     return [basePath];
   }
 
-  return [basePath, ...getWindowsExecutableExtensions(env).map((extension) => `${basePath}${extension}`)];
+  return [
+    basePath,
+    ...getWindowsExecutableExtensions(env).map(
+      (extension) => `${basePath}${extension}`,
+    ),
+  ];
 }
 
 async function firstExistingPath(candidates: string[]): Promise<string | null> {

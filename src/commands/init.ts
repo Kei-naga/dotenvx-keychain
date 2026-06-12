@@ -189,7 +189,10 @@ export async function initCommand(
       storedByThisRun = true;
     } catch (error) {
       stderr(formatSecretStoreError(error));
-      if (resolvedKey.source === "local-dotenvx" && (await fileExists(envKeysPath))) {
+      if (
+        resolvedKey.source === "local-dotenvx" &&
+        (await fileExists(envKeysPath))
+      ) {
         emitPreservedEnvKeysMessage(stderr, envKeysPath);
       }
       return CLI_EXIT_CODE.infrastructure;
@@ -215,7 +218,10 @@ export async function initCommand(
       stderr("Manual secret store verification is required.");
     }
 
-    if (resolvedKey.source === "local-dotenvx" && (await fileExists(envKeysPath))) {
+    if (
+      resolvedKey.source === "local-dotenvx" &&
+      (await fileExists(envKeysPath))
+    ) {
       emitPreservedEnvKeysMessage(stderr, envKeysPath);
     }
 
