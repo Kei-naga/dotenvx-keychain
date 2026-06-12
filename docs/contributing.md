@@ -59,6 +59,13 @@ Start with the smallest test set that protects the v1 contract in
 - lint, typecheck, and the automated test suite must stay fast enough to run on
   every PR
 
+Current local baseline commands:
+
+- `npm run lint`
+- `npm run format:check`
+- `npm run typecheck`
+- `npm test`
+
 ### Minimum unit-test targets
 
 - explicit ID validation

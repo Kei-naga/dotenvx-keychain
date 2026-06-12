@@ -1,0 +1,226 @@
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
+
+import { afterEach, describe, expect, it } from "vitest";
+
+import { CONFIG_FILE_NAME, writeConfig } from "../../src/config/configFile.js";
+import { initCommand } from "../../src/commands/init.js";
+import type { DotenvxAdapter } from "../../src/dotenvx/adapter.js";
+import { MockSecretStore } from "../../src/secretStore/mock/mockSecretStore.js";
+
+const tempDirectories: string[] = [];
+
+async function createTempDirectory(): Promise<string> {
+  const directory = await mkdtemp(path.join(tmpdir(), "dxk-init-"));
+  tempDirectories.push(directory);
+  return directory;
+}
+
+function createOutputCapture(): {
+  stdout: string[];
+  stderr: string[];
+  emitStdout: (message: string) => void;
+  emitStderr: (message: string) => void;
+} {
+  const stdout: string[] = [];
+  const stderr: string[] = [];
+
+  return {
+    stdout,
+    stderr,
+    emitStdout(message: string) {
+      stdout.push(message);
+    },
+    emitStderr(message: string) {
+      stderr.push(message);
+    },
+  };
+}
+
+function createDotenvxAdapter(
+  readPrivateKey: (projectRoot: string) => Promise<string | null>,
+): DotenvxAdapter {
+  return { readPrivateKey };
+}
+
+afterEach(async () => {
+  await Promise.all(
+    tempDirectories.splice(0).map((directory) =>
+      rm(directory, { recursive: true, force: true }),
+    ),
+  );
+});
+
+describe("initCommand", () => {
+  it("reuses an existing store value before checking other key sources", async () => {
+    const directory = await createTempDirectory();
+    const store = new MockSecretStore([["app-a", "stored-secret"]]);
+    const output = createOutputCapture();
+    let adapterCalls = 0;
+
+    const exitCode = await initCommand(
+      { id: "app-a" },
+      {
+        cwd: directory,
+        stdout: output.emitStdout,
+        stderr: output.emitStderr,
+        secretStoreFactory: {
+          create: async () => store,
+        },
+        dotenvxAdapter: createDotenvxAdapter(async () => {
+          adapterCalls += 1;
+          return "adapter-secret";
+        }),
+      },
+    );
+
+    expect(exitCode).toBe(0);
+    expect(adapterCalls).toBe(0);
+    expect(output.stderr).toEqual([]);
+    await expect(readFile(path.join(directory, CONFIG_FILE_NAME), "utf8")).resolves.toBe(
+      '{\n  "id": "app-a"\n}\n',
+    );
+  });
+
+  it("stores the parent DOTENV_PRIVATE_KEY when the store is empty", async () => {
+    const directory = await createTempDirectory();
+    const store = new MockSecretStore();
+    const output = createOutputCapture();
+
+    const exitCode = await initCommand(
+      { id: "app-a" },
+      {
+        cwd: directory,
+        env: {
+          DOTENV_PRIVATE_KEY: "from-env",
+        },
+        stdout: output.emitStdout,
+        stderr: output.emitStderr,
+        secretStoreFactory: {
+          create: async () => store,
+        },
+        dotenvxAdapter: createDotenvxAdapter(async () => null),
+      },
+    );
+
+    expect(exitCode).toBe(0);
+    await expect(store.get("app-a")).resolves.toBe("from-env");
+    expect(output.stdout).toEqual([
+      "Initialized dotenvx-keychain with id: app-a",
+      "Wrote config: .dotenvx-keychain",
+    ]);
+  });
+
+  it("reads a local dotenvx key and deletes .env.keys after success", async () => {
+    const directory = await createTempDirectory();
+    const envKeysPath = path.join(directory, ".env.keys");
+    const store = new MockSecretStore();
+
+    await writeFile(envKeysPath, "placeholder", "utf8");
+
+    const exitCode = await initCommand(
+      { id: "app-a" },
+      {
+        cwd: directory,
+        secretStoreFactory: {
+          create: async () => store,
+        },
+        dotenvxAdapter: createDotenvxAdapter(async () => "from-local-dotenvx"),
+      },
+    );
+
+    expect(exitCode).toBe(0);
+    await expect(store.get("app-a")).resolves.toBe("from-local-dotenvx");
+    await expect(readFile(path.join(directory, CONFIG_FILE_NAME), "utf8")).resolves.toBe(
+      '{\n  "id": "app-a"\n}\n',
+    );
+    await expect(readFile(envKeysPath, "utf8")).rejects.toBeTruthy();
+  });
+
+  it("rolls back the stored key when config writing fails", async () => {
+    const directory = await createTempDirectory();
+    const store = new MockSecretStore();
+    const output = createOutputCapture();
+
+    const exitCode = await initCommand(
+      { id: "app-a" },
+      {
+        cwd: directory,
+        env: {
+          DOTENV_PRIVATE_KEY: "from-env",
+        },
+        stdout: output.emitStdout,
+        stderr: output.emitStderr,
+        secretStoreFactory: {
+          create: async () => store,
+        },
+        dotenvxAdapter: createDotenvxAdapter(async () => null),
+        writeConfig: async () => {
+          throw new Error("write failed");
+        },
+      },
+    );
+
+    expect(exitCode).toBe(4);
+    await expect(store.get("app-a")).resolves.toBeNull();
+    expect(output.stderr).toContain("Failed to write config: .dotenvx-keychain");
+  });
+
+  it("returns exit 5 when removing .env.keys fails after success", async () => {
+    const directory = await createTempDirectory();
+    const envKeysPath = path.join(directory, ".env.keys");
+    const store = new MockSecretStore();
+    const output = createOutputCapture();
+
+    await writeFile(envKeysPath, "placeholder", "utf8");
+
+    const exitCode = await initCommand(
+      { id: "app-a" },
+      {
+        cwd: directory,
+        env: {
+          DOTENV_PRIVATE_KEY: "from-env",
+        },
+        stdout: output.emitStdout,
+        stderr: output.emitStderr,
+        secretStoreFactory: {
+          create: async () => store,
+        },
+        dotenvxAdapter: createDotenvxAdapter(async () => null),
+        deleteFile: async () => {
+          throw new Error("cannot delete");
+        },
+      },
+    );
+
+    expect(exitCode).toBe(5);
+    expect(output.stderr).toContain(
+      `Failed to remove local key file: ${envKeysPath}`,
+    );
+  });
+
+  it("returns exit 3 when no key source is available for an existing config", async () => {
+    const directory = await createTempDirectory();
+    const store = new MockSecretStore();
+    const output = createOutputCapture();
+
+    await writeConfig(directory, "app-a");
+
+    const exitCode = await initCommand(
+      {},
+      {
+        cwd: directory,
+        stdout: output.emitStdout,
+        stderr: output.emitStderr,
+        secretStoreFactory: {
+          create: async () => store,
+        },
+        dotenvxAdapter: createDotenvxAdapter(async () => null),
+      },
+    );
+
+    expect(exitCode).toBe(3);
+    expect(output.stderr[0]).toBe("No key found for id: app-a");
+  });
+});
