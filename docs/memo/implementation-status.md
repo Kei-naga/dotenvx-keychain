@@ -17,19 +17,19 @@
 
 ## 3. フェーズ別計画と進捗
 
-| Phase | 内容 | 状態 | 補足 |
-| --- | --- | --- | --- |
-| 1 | TypeScript / ESM / Vitest / npm の実装基盤 | 完了 | `package.json`、`tsconfig.json`、`vitest.config.ts`、CLI entry を作成済み |
-| 2 | Secret Store 選定スパイク | 完了（暫定） | `keytar` を採用して実装を進めた。実 OS スモークで最終確認が必要 |
-| 3 | config / ID / ルート探索の純粋ロジック | 完了 | `.dotenvx-keychain` 読み書き、ID 検証、自動生成、親探索を実装済み |
-| 4 | CLI runtime 共通部 | 完了 | 引数解析、dispatcher、終了コード、Windows シェル判定ロジックを実装済み |
-| 5 | Secret Store 抽象とバックエンド | 完了 | interface、factory、mock backend、`keytar` backend を実装済み |
-| 6 | `dotenvx` resolver / adapter | 完了 | 同梱依存の解決と `keypair DOTENV_PRIVATE_KEY` 読み取りを実装済み |
-| 7 | `init` 統合 | 完了 | 鍵ソース優先順位、rollback、`.env.keys` cleanup、exit code を実装済み |
-| 8 | `run` 統合 | 完了 | pre-injection bypass、config 解決、auto ID fallback、子終了コード伝播を実装済み |
-| 9 | `list` / `remove` | 完了 | 昇順列挙、完全一致削除、not-found の exit `3` を実装済み |
-| 10 | エラー / セキュリティ整備 | 大枠完了 | 秘密値非表示、短いメッセージ、主要 exit code を実装済み |
-| 11 | 検証と配布確認 | 一部完了 | モック自動テスト、packaged CLI smoke、Windows での real-store smoke 通過までは完了。`darwin` / `linux` での確認は未完了 |
+| Phase | 内容                                       | 状態         | 補足                                                                                                                    |
+| ----- | ------------------------------------------ | ------------ | ----------------------------------------------------------------------------------------------------------------------- |
+| 1     | TypeScript / ESM / Vitest / npm の実装基盤 | 完了         | `package.json`、`tsconfig.json`、`vitest.config.ts`、CLI entry を作成済み                                               |
+| 2     | Secret Store 選定スパイク                  | 完了（暫定） | `keytar` を採用して実装を進めた。実 OS スモークで最終確認が必要                                                         |
+| 3     | config / ID / ルート探索の純粋ロジック     | 完了         | `.dotenvx-keychain` 読み書き、ID 検証、自動生成、親探索を実装済み                                                       |
+| 4     | CLI runtime 共通部                         | 完了         | 引数解析、dispatcher、終了コード、Windows シェル判定ロジックを実装済み                                                  |
+| 5     | Secret Store 抽象とバックエンド            | 完了         | interface、factory、mock backend、`keytar` backend を実装済み                                                           |
+| 6     | `dotenvx` resolver / adapter               | 完了         | 同梱依存の解決と `keypair DOTENV_PRIVATE_KEY` 読み取りを実装済み                                                        |
+| 7     | `init` 統合                                | 完了         | 鍵ソース優先順位、rollback、`.env.keys` cleanup、exit code を実装済み                                                   |
+| 8     | `run` 統合                                 | 完了         | pre-injection bypass、config 解決、auto ID fallback、子終了コード伝播を実装済み                                         |
+| 9     | `list` / `remove`                          | 完了         | 昇順列挙、完全一致削除、not-found の exit `3` を実装済み                                                                |
+| 10    | エラー / セキュリティ整備                  | 大枠完了     | 秘密値非表示、短いメッセージ、主要 exit code を実装済み                                                                 |
+| 11    | 検証と配布確認                             | 一部完了     | モック自動テスト、packaged CLI smoke、Windows での real-store smoke 通過までは完了。`darwin` / `linux` での確認は未完了 |
 
 ## 4. 実装済みの主要範囲
 
@@ -91,7 +91,8 @@
 ### 4.6 テスト
 
 - `test/config/`:
-  設定ファイル、ID、自動生成、親探索の単体テストを追加済み。
+  設定ファイル、自動 ID 生成、`init` / `run` 向けの ID 解決・親探索のテストを追加済み。
+  ID バリデーションは設定読み取り異常系と `remove` の異常系で確認している。
 - `test/cli/`:
   引数解析の単体テストを追加済み。
 - `test/secretStore/`:
@@ -134,8 +135,37 @@
   実 OS スモークの結果とメンテナンス面を踏まえて最終確定する必要がある。
 - 実運用上の問題が出る場合は、抽象の内側だけを差し替える前提で再評価する。
 
-## 7. 推奨する次の作業順
+## 7. リリースまでの残タスク
 
-1. `npm run test:real-store-smoke` を `darwin` と `linux` でも実行して結果を揃える。
-2. Linux の Secret Service 利用不可ケースを、手動確認に残すか CI で扱うか決める。
-3. 必要なら README に CLI の使い方と既知の環境前提を追記する。
+### 7.1 初回リリース前に完了したい項目
+
+1. `npm run test:real-store-smoke` を `darwin` で実行し、
+   実ストアに対する `set/get/list/remove` の結果を記録する。
+2. `npm run test:real-store-smoke` を `linux` で実行し、
+   Secret Service 利用可能環境での結果を記録する。
+3. Linux の Secret Service 利用不可ケースを、
+   手動確認に残すか、専用ジョブや再現手順として管理するか決める。
+4. 上記結果を踏まえて、`keytar` 採用を初回リリース向けに最終確定する。
+   実運用上の問題が見つかる場合は、backend 差し替え要否を判断する。
+5. README を公開パッケージ向けに更新し、少なくとも次を含める。
+   install 方法、`init` / `run` / `list` / `remove` の基本例、対応 OS、
+   Linux の前提条件、CI / 本番では事前注入を使う方針。
+6. リリース候補に対して、`npm run format:check`、`npm run lint`、
+   `npm run typecheck`、`npm test`、`npm run build`、`npm run pack:smoke` を実行する。
+7. リリース作業を行う OS では、上記に加えて
+   `npm run test:real-store-smoke` も再実行し、直前確認を残す。
+
+### 7.2 初回リリース判断の目安
+
+- `win32`、`darwin`、`linux` の少なくとも 1 回分の real-store smoke 結果が揃っている。
+- README だけで、初回利用者が `init` から `run` まで辿れる。
+- tarball install 後も `dotenvx-keychain` と `dxk` の両方が起動し、
+  同梱 `dotenvx` 解決が維持されている。
+- Linux の Secret Service 利用不可ケースの扱いが、
+  README または運用メモで明示されている。
+
+### 7.3 初回リリース後に回せる項目
+
+- GitHub Actions などでの継続 CI と required status checks の整備。
+- 実ストア smoke の OS マトリクス自動化。
+- ルールセット制約、CODEOWNERS、レビュー要件の強化。
