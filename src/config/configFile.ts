@@ -25,11 +25,10 @@ export class ReadConfigError extends Error {
     filePath: string,
     cause?: unknown,
   ) {
-    super(`Failed to read config at ${filePath}: ${code}`);
+    super(`Failed to read config at ${filePath}: ${code}`, { cause });
     this.name = "ReadConfigError";
     this.code = code;
     this.path = filePath;
-    this.cause = cause;
   }
 }
 

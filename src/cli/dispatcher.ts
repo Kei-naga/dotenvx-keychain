@@ -1,4 +1,5 @@
 import { parseCliArgs } from "./parseArgs.js";
+import { CLI_EXIT_CODE } from "./exitCodes.js";
 import { initCommand, type InitCommandDependencies } from "../commands/init.js";
 import { listCommand, type ListCommandDependencies } from "../commands/list.js";
 import {
@@ -37,13 +38,13 @@ export async function dispatch(
 
   if (parsed.type === "help") {
     console.log(formatUsage());
-    return argv.length === 0 ? 2 : 0;
+    return argv.length === 0 ? CLI_EXIT_CODE.usage : CLI_EXIT_CODE.success;
   }
 
   if (parsed.type === "usage-error") {
     console.error(parsed.message);
     console.error(formatUsage());
-    return 2;
+    return CLI_EXIT_CODE.usage;
   }
 
   if (parsed.command.name === "init") {
@@ -61,5 +62,5 @@ export async function dispatch(
   if (parsed.command.name === "remove") {
     return removeCommand(parsed.command, dependencies);
   }
-  return 4;
+  return CLI_EXIT_CODE.infrastructure;
 }

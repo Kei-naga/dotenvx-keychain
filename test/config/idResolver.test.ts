@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { getConfigPath, writeConfig } from "../../src/config/configFile.js";
 import { createAutoIdFromRealPath } from "../../src/config/id.js";
@@ -115,5 +115,44 @@ describe("resolveRunProject", () => {
       configPath: null,
       source: "cwd-fallback",
     });
+  });
+
+  it("rethrows non-ENOENT access errors instead of falling back", async () => {
+    const directory = await createTempDirectory();
+    const configPath = getConfigPath(directory);
+
+    vi.resetModules();
+    vi.doMock("node:fs/promises", async (importOriginal) => {
+      const actual = await importOriginal<typeof import("node:fs/promises")>();
+
+      return {
+        ...actual,
+        access: vi.fn(async (filePath: string) => {
+          if (filePath === configPath) {
+            const error = new Error(
+              "permission denied",
+            ) as NodeJS.ErrnoException;
+            error.code = "EACCES";
+            throw error;
+          }
+
+          return actual.access(filePath);
+        }),
+      };
+    });
+
+    try {
+      const { resolveRunProject: resolveRunProjectWithAccessError } =
+        await import("../../src/config/idResolver.js");
+
+      await expect(
+        resolveRunProjectWithAccessError(directory),
+      ).rejects.toMatchObject({
+        code: "EACCES",
+      });
+    } finally {
+      vi.doUnmock("node:fs/promises");
+      vi.resetModules();
+    }
   });
 });

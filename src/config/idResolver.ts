@@ -21,8 +21,17 @@ async function fileExists(filePath: string): Promise<boolean> {
   try {
     await access(filePath);
     return true;
-  } catch {
-    return false;
+  } catch (error) {
+    const code =
+      typeof error === "object" && error !== null && "code" in error
+        ? error.code
+        : undefined;
+
+    if (code === "ENOENT") {
+      return false;
+    }
+
+    throw error;
   }
 }
 
