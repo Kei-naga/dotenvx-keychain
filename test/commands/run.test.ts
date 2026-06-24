@@ -29,6 +29,7 @@ describe("runCommand", () => {
   it("bypasses config and store lookup when DOTENV_PRIVATE_KEY is pre-injected", async () => {
     const directory = await createTempDirectory();
     let factoryCalls = 0;
+    const output: string[] = [];
 
     const exitCode = await runCommand(
       { command: "node", args: ["app.js"] },
@@ -43,6 +44,9 @@ describe("runCommand", () => {
             factoryCalls += 1;
             return new MockSecretStore();
           },
+        },
+        stderr: (message) => {
+          output.push(message);
         },
         resolveDotenvxBinary: async () => "C:/fake/dotenvx.js",
         runProcess: async (options) => {
@@ -61,12 +65,14 @@ describe("runCommand", () => {
 
     expect(exitCode).toBe(0);
     expect(factoryCalls).toBe(0);
+    expect(output.join("\n")).not.toContain("pre-injected");
   });
 
   it("reads the nearest config and uses the stored key", async () => {
     const rootDirectory = await createTempDirectory();
     const childDirectory = path.join(rootDirectory, "apps", "web");
     const store = new MockSecretStore([["child-id", "stored-secret"]]);
+    const output: string[] = [];
 
     await mkdir(childDirectory, { recursive: true });
     await writeConfig(path.join(rootDirectory, "apps"), "child-id");
@@ -77,6 +83,9 @@ describe("runCommand", () => {
         cwd: childDirectory,
         env: {
           PATH: process.env.PATH,
+        },
+        stderr: (message) => {
+          output.push(message);
         },
         secretStoreFactory: {
           create: async () => store,
@@ -91,6 +100,63 @@ describe("runCommand", () => {
     );
 
     expect(exitCode).toBe(7);
+    expect(output.join("\n")).not.toContain("stored-secret");
+  });
+
+  it("does not print a pre-injected key when dotenvx resolution fails", async () => {
+    const directory = await createTempDirectory();
+    const output: string[] = [];
+
+    const exitCode = await runCommand(
+      { command: "node", args: ["app.js"] },
+      {
+        cwd: directory,
+        env: {
+          DOTENV_PRIVATE_KEY: "pre-injected",
+          PATH: process.env.PATH,
+        },
+        stderr: (message) => {
+          output.push(message);
+        },
+        resolveDotenvxBinary: async () => {
+          throw new Error("resolution failed");
+        },
+      },
+    );
+
+    expect(exitCode).toBe(4);
+    expect(output).toContain("The bundled dotenvx dependency is unavailable.");
+    expect(output.join("\n")).not.toContain("pre-injected");
+  });
+
+  it("does not print a stored key when dotenvx resolution fails", async () => {
+    const directory = await createTempDirectory();
+    const output: string[] = [];
+
+    await writeConfig(directory, "app-a");
+
+    const exitCode = await runCommand(
+      { command: "node", args: ["app.js"] },
+      {
+        cwd: directory,
+        env: {
+          PATH: process.env.PATH,
+        },
+        stderr: (message) => {
+          output.push(message);
+        },
+        secretStoreFactory: {
+          create: async () => new MockSecretStore([["app-a", "stored-secret"]]),
+        },
+        resolveDotenvxBinary: async () => {
+          throw new Error("resolution failed");
+        },
+      },
+    );
+
+    expect(exitCode).toBe(4);
+    expect(output).toContain("The bundled dotenvx dependency is unavailable.");
+    expect(output.join("\n")).not.toContain("stored-secret");
   });
 
   it("falls back to an automatic ID when no config file exists", async () => {

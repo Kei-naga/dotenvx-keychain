@@ -78,6 +78,9 @@ describe("initCommand", () => {
     expect(exitCode).toBe(0);
     expect(adapterCalls).toBe(0);
     expect(output.stderr).toEqual([]);
+    expect([...output.stdout, ...output.stderr].join("\n")).not.toContain(
+      "stored-secret",
+    );
     await expect(
       readFile(path.join(directory, CONFIG_FILE_NAME), "utf8"),
     ).resolves.toBe('{\n  "id": "app-a"\n}\n');
@@ -116,6 +119,7 @@ describe("initCommand", () => {
     const directory = await createTempDirectory();
     const envKeysPath = path.join(directory, ".env.keys");
     const store = new MockSecretStore();
+    const output = createOutputCapture();
 
     await writeFile(envKeysPath, "placeholder", "utf8");
 
@@ -123,6 +127,8 @@ describe("initCommand", () => {
       { id: "app-a" },
       {
         cwd: directory,
+        stdout: output.emitStdout,
+        stderr: output.emitStderr,
         secretStoreFactory: {
           create: async () => store,
         },
@@ -132,6 +138,9 @@ describe("initCommand", () => {
 
     expect(exitCode).toBe(0);
     await expect(store.get("app-a")).resolves.toBe("from-local-dotenvx");
+    expect([...output.stdout, ...output.stderr].join("\n")).not.toContain(
+      "from-local-dotenvx",
+    );
     await expect(
       readFile(path.join(directory, CONFIG_FILE_NAME), "utf8"),
     ).resolves.toBe('{\n  "id": "app-a"\n}\n');
@@ -166,6 +175,9 @@ describe("initCommand", () => {
     await expect(store.get("app-a")).resolves.toBeNull();
     expect(output.stderr).toContain(
       "Failed to write config: .dotenvx-keychain",
+    );
+    expect([...output.stdout, ...output.stderr].join("\n")).not.toContain(
+      "from-env",
     );
   });
 
