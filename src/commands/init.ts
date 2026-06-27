@@ -245,8 +245,8 @@ export async function initCommand(
       if (isMissingFileError(error)) {
         // Another process may have removed .env.keys after the existence check.
       } else {
-      stderr(`Failed to remove local key file: ${envKeysPath}`);
-      return CLI_EXIT_CODE.postProcessFailure;
+        stderr(`Failed to remove local key file: ${envKeysPath}`);
+        return CLI_EXIT_CODE.postProcessFailure;
       }
     }
   }

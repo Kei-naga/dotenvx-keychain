@@ -74,7 +74,11 @@ export async function runCommand(
   const propagateSignal =
     dependencies.propagateSignal ??
     ((signal: NodeJS.Signals) => {
-      process.kill(process.pid, signal);
+      try {
+        process.kill(process.pid, signal);
+      } catch {
+        // Keep the child-signal path deterministic when the host cannot re-emit.
+      }
     });
 
   let privateKey: string;

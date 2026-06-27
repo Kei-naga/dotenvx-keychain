@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { writeConfig } from "../../src/config/configFile.js";
 import { createAutoIdFromRealPath } from "../../src/config/id.js";
@@ -237,5 +237,39 @@ describe("runCommand", () => {
 
     expect(exitCode).toBe(3);
     expect(output[0]).toBe("No key found for id: app-a");
+  });
+
+  it("returns infrastructure when signal propagation cannot be re-emitted", async () => {
+    const directory = await createTempDirectory();
+    const output: string[] = [];
+    const killSpy = vi
+      .spyOn(process, "kill")
+      .mockImplementation(() => {
+        throw new Error("unsupported signal");
+      });
+
+    try {
+      const exitCode = await runCommand(
+        { command: "node", args: ["app.js"] },
+        {
+          cwd: directory,
+          env: {
+            DOTENV_PRIVATE_KEY: "pre-injected",
+            PATH: process.env.PATH,
+          },
+          stderr: (message) => {
+            output.push(message);
+          },
+          resolveDotenvxBinary: async () => "C:/fake/dotenvx.js",
+          runProcess: async () => ({ exitCode: null, signal: "SIGTERM" }),
+        },
+      );
+
+      expect(exitCode).toBe(4);
+      expect(killSpy).toHaveBeenCalledWith(process.pid, "SIGTERM");
+      expect(output).toEqual([]);
+    } finally {
+      killSpy.mockRestore();
+    }
   });
 });
