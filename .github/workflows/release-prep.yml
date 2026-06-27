@@ -1,0 +1,78 @@
+name: Release Prep
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  release-prep:
+    name: release-prep
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check formatting
+        run: npm run format:check
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Run test suite
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+      - name: Check npm pack contents
+        run: npm run pack:dry-run
+
+      - name: Smoke test packaged CLI
+        run: npm run pack:smoke
+
+      - name: Create release tarball
+        run: |
+          rm -f ./*.tgz pack-output.json
+          npm pack --json > pack-output.json
+
+      - name: Upload release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-prep-${{ github.run_id }}
+          path: |
+            *.tgz
+            pack-output.json
+          if-no-files-found: error
+
+      - name: Record manual native-store gate
+        run: |
+          {
+            echo '## Manual release gate'
+            echo ''
+            echo '- Before npm publish, rerun `npm run test:real-store-smoke` on the release machine.'
+            echo '- Keep manual sign-off for the win32, darwin, and linux native-store paths until the CI matrix is ready.'
+            echo '- SemVer tags should be created from the merged `main` commit after that sign-off is complete.'
+          } >> "$GITHUB_STEP_SUMMARY"

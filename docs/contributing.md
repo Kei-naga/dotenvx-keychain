@@ -45,6 +45,9 @@ Use short kebab-case for `<topic>`.
 Approvals stay at `0` for now so the repository remains usable in solo
 maintenance. Raise them when multiple maintainers are active.
 
+Required status checks should use the three CI job checks emitted by
+[`CI`](../.github/workflows/ci.yml): `quality`, `test`, and `package`.
+
 ## Testing Policy
 
 Start with the smallest test set that protects the v1 contract in
@@ -61,10 +64,13 @@ Start with the smallest test set that protects the v1 contract in
 
 Current local baseline commands:
 
-- `npm run lint`
 - `npm run format:check`
+- `npm run lint`
 - `npm run typecheck`
 - `npm test`
+- `npm run build`
+- `npm run pack:dry-run`
+- `npm run pack:smoke`
 
 ### Minimum unit-test targets
 
@@ -93,9 +99,9 @@ Current local baseline commands:
 - real macOS Keychain, Windows Credential Manager, and Linux Secret Service
   behavior can stay as release-gated manual smoke tests until the CI matrix is
   ready
-- packed-install checks such as `npm pack`, `npx dotenvx-keychain`, and `dxk`
-  alias resolution can run on release preparation or before making status
-  checks required
+- before publishing a tagged release, rerun `npm run test:real-store-smoke` on
+  the release machine and keep win32 / darwin / linux native-store sign-off
+  outside GitHub-hosted runners for now
 
 For Linux / WSL environment prerequisites and the verified Secret Service smoke
 flow, refer to [linux-secret-service.md](./linux-secret-service.md).
@@ -106,18 +112,34 @@ flow, refer to [linux-secret-service.md](./linux-secret-service.md).
   [spec.md](./spec.md)
 - secret values must never appear in snapshots, assertion messages, or failure
   output
-- once the test suite is stable, make lint, typecheck, unit tests, and the
-  minimum integration suite required on `develop` and `main`
+- keep the `quality`, `test`, and `package` CI job checks required on
+  `develop` and `main`
+
+## GitHub Actions
+
+- [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) runs on pull
+  requests into and pushes to `develop` and `main`
+- the CI workflow enforces `npm run format:check`, `npm run lint`,
+  `npm run typecheck`, `npm test`, `npm run build`, `npm run pack:dry-run`,
+  and `npm run pack:smoke`
+- [`.github/workflows/release-prep.yml`](../.github/workflows/release-prep.yml)
+  runs on SemVer tags and optional manual dispatch, reruns the CI gate, and
+  uploads a release tarball artifact
+- `release-prep` does not publish to npm; maintainers must complete the manual
+  native-store smoke gate before tagging a release from the merged `main`
+  commit
 
 ## Not Enforced Yet
 
 - Limit PRs into `main` to `develop`, `release/*`, and `hotfix/*`.
-- Require status checks.
 - Require CODEOWNERS review.
+- Promote real-store smoke into a GitHub-hosted CI matrix.
+- Automate npm publish.
 
 ## Review This Strategy When
 
 - more people are developing in parallel
 - `main` needs one or more required approvals
 - maintenance branches become necessary
-- stable CI checks are ready to become required
+- native-store smoke is stable enough for a cross-platform CI matrix
+- release preparation should draft GitHub Releases or publish to npm
