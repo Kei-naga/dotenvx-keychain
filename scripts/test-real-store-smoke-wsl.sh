@@ -22,4 +22,4 @@ done
 
 export DXK_LINUX_KEYRING_PASSWORD="${DXK_WSL_KEYRING_PASSWORD:-dxk-linux-smoke}"
 
-exec "$repo_root/scripts/test-real-store-smoke-linux.sh"
+exec bash "$repo_root/scripts/test-real-store-smoke-linux.sh"

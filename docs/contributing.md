@@ -45,7 +45,7 @@ Use short kebab-case for `<topic>`.
 Approvals stay at `0` for now so the repository remains usable in solo
 maintenance. Raise them when multiple maintainers are active.
 
-Required status checks should use the three CI job checks emitted by
+Required status checks should use the CI job checks currently emitted by
 [`CI`](../.github/workflows/ci.yml): `quality`, `test`, `package`, and
 `linux-real-store-smoke`.
 
@@ -72,7 +72,7 @@ Current local baseline commands:
 - `npm run build`
 - `npm run pack:dry-run`
 - `npm run pack:smoke`
-- `npm run test:real-store-smoke:linux`
+- `npm run test:real-store-smoke:linux` (Linux only)
 
 ### Minimum unit-test targets
 
