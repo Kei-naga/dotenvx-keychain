@@ -21,7 +21,7 @@
 
 | ファイル | 主な対象 |
 | --- | --- |
-| [05-implementation-readiness.md](./05-implementation-readiness.md) | 実装ブロッカー、推奨決定、実装着手条件 |
+| [05-implementation-readiness.md](./05-implementation-readiness.md) | 実装前の論点と、現在採用した設計判断 |
 | [10-config-and-id.md](./10-config-and-id.md) | `.dotenvx-keychain`、ID バリデーション、自動生成、ルート解決 |
 | [20-secret-store-backend.md](./20-secret-store-backend.md) | シークレットストア抽象、OS 別マッピング、バックエンド異常 |
 | [30-cli-runtime-common.md](./30-cli-runtime-common.md) | 引数解析、`dotenvx` 解決、子プロセス起動、終了コード伝播 |
@@ -30,7 +30,7 @@
 | [50-command-run.md](./50-command-run.md) | `run` の ID 解決、鍵注入、子プロセス実行、失敗分岐 |
 | [60-command-admin.md](./60-command-admin.md) | `list` と `remove` の出力、整列、削除契約 |
 | [70-error-security-test.md](./70-error-security-test.md) | エラー分類、セキュリティ要件、受け入れ観点 |
-| [90-future-init-key-generation.md](./90-future-init-key-generation.md) | `init` の自動鍵生成を将来どう扱うか |
+| [90-future-init-key-generation.md](./90-future-init-key-generation.md) | `init` bootstrap の安全設計と採用理由 |
 
 ## 4. 執筆ルール
 

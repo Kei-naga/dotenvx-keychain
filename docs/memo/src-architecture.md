@@ -32,7 +32,7 @@ flowchart TD
     J --> L["config/id.ts<br/>assertValidId() / createAutoIdFromRealPath()"]
     F --> M["secretStore/factory.ts<br/>createSecretStore()"]
     M --> N["secretStore/backends/keytarStore.ts<br/>KeytarSecretStore"]
-    F --> O["dotenvx/adapter.ts<br/>DefaultDotenvxAdapter.readPrivateKey()"]
+    F --> O["dotenvx/adapter.ts<br/>readPrivateKey() / bootstrapProjectEnv()"]
     O --> P["dotenvx/resolver.ts<br/>resolveDotenvxBinary()"]
 
     G --> Q["config/idResolver.ts<br/>resolveRunProject()"]
@@ -56,6 +56,7 @@ flowchart TD
 1. 既存の Secret Store 内の鍵
 2. 親プロセスの `DOTENV_PRIVATE_KEY`
 3. ローカル `.env` / `.env.keys` から `dotenvx` 経由で読んだ鍵
+4. 隔離した一時ディレクトリで `dotenvx` を使う bootstrap
 
 ```mermaid
 flowchart TD
@@ -69,22 +70,29 @@ flowchart TD
     G -->|yes| H["環境変数の鍵を採用"]
     G -->|no| I["dotenvxAdapter.readPrivateKey(projectRoot)"]
     I --> J{"ローカル鍵あり?"}
-    J -->|no| K["not found<br/>exit 3"]
     J -->|yes| L["ローカル鍵を採用"]
+    J -->|no| K{"既存 config または<br/>暗号化済み .env ?"}
+    K -->|yes| M["not found<br/>exit 3"]
+    K -->|no| N["dotenvxAdapter.bootstrapProjectEnv(projectRoot)"]
+    N --> O["bootstrap 鍵と暗号化済み .env を採用"]
 
-    H --> M{"store へ保存が必要?"}
-    L --> M
-    F --> N["writeConfig(projectRoot, id)"]
-    M -->|yes| O["store.set(id, privateKey)"]
-    M -->|no| N
-    O --> N
+    H --> P{"store へ保存が必要?"}
+    L --> P
+    O --> P
+    F --> Q["writeConfig(projectRoot, id)"]
+    P -->|yes| R["store.set(id, privateKey)"]
+    P -->|no| Q
+    R --> S{"bootstrap .env の反映が必要?"}
+    S -->|yes| T[".env を更新"]
+    S -->|no| Q
+    T --> Q
 
-    N -->|失敗| P["必要なら store.remove(id) で rollback<br/>exit 4"]
-    N -->|成功| Q{".env.keys が存在?"}
-    Q -->|yes| R["削除を試行"]
-    Q -->|no| S["success<br/>exit 0"]
-    R -->|成功| S
-    R -->|失敗| T["post-process failure<br/>exit 5"]
+    Q -->|失敗| U["必要なら store.remove(id) と .env rollback<br/>exit 4"]
+    Q -->|成功| V{".env.keys が存在?"}
+    V -->|yes| W["削除を試行"]
+    V -->|no| X["success<br/>exit 0"]
+    W -->|成功| X
+    W -->|失敗| Y["post-process failure<br/>exit 5"]
 ```
 
 ## `run` フロー
@@ -165,10 +173,12 @@ classDiagram
     class DotenvxAdapter {
         <<interface>>
         +readPrivateKey(projectRoot) Promise~string|null~
+        +bootstrapProjectEnv(projectRoot) Promise~DotenvxBootstrapResult~
     }
 
     class DefaultDotenvxAdapter {
         +readPrivateKey(projectRoot) Promise~string|null~
+        +bootstrapProjectEnv(projectRoot) Promise~DotenvxBootstrapResult~
     }
 
     class DotenvxAdapterError
@@ -202,7 +212,7 @@ classDiagram
 | `src/cli/`         | 引数解析、command dispatch、終了コード、子プロセス起動、Windows シェル判定 |
 | `src/commands/`    | CLI 契約を実行時処理へ変換する orchestration                               |
 | `src/config/`      | `.dotenvx-keychain` の読み書き、ID 検証、自動 ID 生成、親ディレクトリ探索  |
-| `src/dotenvx/`     | 同梱 `dotenvx` バイナリ解決とローカル鍵読取                                |
+| `src/dotenvx/`     | 同梱 `dotenvx` バイナリ解決、ローカル鍵読取、安全な bootstrap                |
 | `src/secretStore/` | OS Secret Store 抽象、backend 生成、`keytar` 実装、テスト用 mock           |
 
 ## 補足メモ

@@ -170,6 +170,7 @@ npm run test:real-store-smoke
 | `Failed to load the native secret store backend.`                           | `keytar` addon 自体が読めていない                            | `libsecret-1.so.0` の有無、`ldd` の結果                            |
 | `GDBus.Error:org.freedesktop.DBus.Error.ServiceUnknown`                     | Secret Service provider が session bus にいない              | `gnome-keyring` 導入状態、daemon 起動状態                          |
 | `Object does not exist at path "/org/freedesktop/secrets/collection/login"` | default alias はあるが collection 実体が壊れているか未初期化 | isolated D-Bus session、`gnome-keyring-daemon --login` / `--start` |
+| `Cannot create an item in a locked collection`                              | default collection は見えているが lock されたまま            | collection unlock 状態、isolated session での `gnome-keyring-daemon --login` 実行 |
 | CLI が exit `4` で失敗                                                      | backend unavailable として正しい                             | 平文 fallback が起きていないことを確認                             |
 
 ## 8. 今回の確認済み環境

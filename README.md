@@ -26,6 +26,11 @@ Initialize a project key reference:
 npx dxk init
 ```
 
+On a fresh project, `init` can bootstrap the first encrypted `.env` and store the
+generated `DOTENV_PRIVATE_KEY` in the native OS secret store. If the project
+already has an encrypted `.env` or an existing `.dotenvx-keychain`, `init` will
+reuse the existing key relationship and will not silently rotate to a new key.
+
 Run a command through bundled `dotenvx` with the stored key:
 
 ```bash
@@ -69,6 +74,8 @@ sudo apt-get install -y libsecret-1-0 gnome-keyring libsecret-tools
 ```
 
 On headless Linux or WSL sessions, installing `gnome-keyring` may still leave the default collection uninitialized. In the current Ubuntu 24.04.1 WSL2 verification, the real-store smoke passed only after initializing a clean D-Bus session and starting `gnome-keyring-daemon` with the login flow so that `/org/freedesktop/secrets/collection/login` actually existed.
+
+If `npm run test:real-store-smoke` fails with `Cannot create an item in a locked collection`, treat it as the same Secret Service prerequisite problem: the default collection exists but is still locked or not fully initialized for the current session.
 
 If those requirements are not met, `init`, `run`, `list`, and `remove` should fail with exit code `4` instead of falling back to plaintext storage.
 
