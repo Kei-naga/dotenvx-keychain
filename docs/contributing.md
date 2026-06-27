@@ -97,6 +97,9 @@ Current local baseline commands:
   alias resolution can run on release preparation or before making status
   checks required
 
+For Linux / WSL environment prerequisites and the verified Secret Service smoke
+flow, refer to [linux-secret-service.md](./linux-secret-service.md).
+
 ### Exit criteria for required status checks
 
 - at least one integration test must cover each acceptance criterion in

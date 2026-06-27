@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 
 import { listCommand } from "../../src/commands/list.js";
 import { removeCommand } from "../../src/commands/remove.js";
+import { SecretStoreError } from "../../src/secretStore/interface.js";
 import { MockSecretStore } from "../../src/secretStore/mock/mockSecretStore.js";
+import { formatSecretStoreUnavailableMessage } from "../../src/secretStore/userMessages.js";
 
 describe("listCommand", () => {
   it("prints sorted IDs", async () => {
@@ -30,6 +32,27 @@ describe("listCommand", () => {
 
     expect(exitCode).toBe(0);
     expect(stdout).toEqual(["app-a", "my-app-v2", "sample-project"]);
+  });
+
+  it("returns actionable guidance when the native secret store is unavailable", async () => {
+    const stderr: string[] = [];
+
+    const exitCode = await listCommand({
+      stderr: (message) => {
+        stderr.push(message);
+      },
+      secretStoreFactory: {
+        create: async () => {
+          throw new SecretStoreError(
+            "backend-unavailable",
+            "backend unavailable",
+          );
+        },
+      },
+    });
+
+    expect(exitCode).toBe(4);
+    expect(stderr).toEqual([formatSecretStoreUnavailableMessage()]);
   });
 });
 

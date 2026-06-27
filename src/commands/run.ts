@@ -13,6 +13,7 @@ import {
   SecretStoreError,
   type SecretStoreFactory,
 } from "../secretStore/interface.js";
+import { formatSecretStoreUnavailableMessage } from "../secretStore/userMessages.js";
 
 export interface RunCommandDependencies {
   cwd?: string;
@@ -39,7 +40,7 @@ function formatSecretStoreError(error: unknown): string {
       case "unsupported-platform":
         return "This platform is not supported by dotenvx-keychain.";
       case "backend-unavailable":
-        return "The native secret store is unavailable.";
+        return formatSecretStoreUnavailableMessage();
       case "backend-io-error":
       case "enumeration-failed":
       case "remove-failed":

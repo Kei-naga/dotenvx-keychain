@@ -13,24 +13,30 @@
   CLI dispatcher、設定ファイル処理、ID 解決は実装済みである。
 - 検証はモック中心の自動テスト、`build`、`lint`、packaged CLI の tarball 実行スモークまで自動化済みである。
 - 実 OS ストア向けの最小スモークテストも追加済みで、Windows 環境では通過を確認済みである。
-- 最大の残項目は、`darwin` と `linux` でも実 OS ストア smoke の結果を揃え、
+- Linux では unavailable path の実測と案内文更新を完了し、
+  `libsecret-1.so.0` 不在時に exit `4` で失敗することを確認済みである。
+- Linux では Ubuntu 24.04.1 LTS on WSL2 上で、`libsecret`、`gnome-keyring`、
+  login collection を初期化した isolated D-Bus session により、
+  実 OS ストア smoke の成功結果も確認済みである。
+- Linux / WSL の環境前提と確認手順は [linux-secret-service.md](../linux-secret-service.md) に集約した。
+- 最大の残項目は、`darwin` で実 OS ストア smoke の結果を揃え、
   初回リリース前の確認記録を残すことである。
 
 ## 3. フェーズ別計画と進捗
 
-| Phase | 内容                                       | 状態         | 補足                                                                                                                    |
-| ----- | ------------------------------------------ | ------------ | ----------------------------------------------------------------------------------------------------------------------- |
-| 1     | TypeScript / ESM / Vitest / npm の実装基盤 | 完了         | `package.json`、`tsconfig.json`、`vitest.config.ts`、CLI entry を作成済み                                               |
-| 2     | Secret Store 選定スパイク                  | 完了         | 初回リリース向けに `keytar` 採用を決定済み。実 OS スモーク結果の収集は検証フェーズで継続する                           |
-| 3     | config / ID / ルート探索の純粋ロジック     | 完了         | `.dotenvx-keychain` 読み書き、ID 検証、自動生成、親探索を実装済み                                                       |
-| 4     | CLI runtime 共通部                         | 完了         | 引数解析、dispatcher、終了コード、Windows シェル判定ロジックを実装済み                                                  |
-| 5     | Secret Store 抽象とバックエンド            | 完了         | interface、factory、mock backend、`keytar` backend を実装済み                                                           |
-| 6     | `dotenvx` resolver / adapter               | 完了         | 同梱依存の解決と `keypair DOTENV_PRIVATE_KEY` 読み取りを実装済み                                                        |
-| 7     | `init` 統合                                | 完了         | 鍵ソース優先順位、rollback、`.env.keys` cleanup、exit code を実装済み                                                   |
-| 8     | `run` 統合                                 | 完了         | pre-injection bypass、config 解決、auto ID fallback、子終了コード伝播を実装済み                                         |
-| 9     | `list` / `remove`                          | 完了         | 昇順列挙、完全一致削除、not-found の exit `3` を実装済み                                                                |
-| 10    | エラー / セキュリティ整備                  | 完了         | 秘密値非表示、短いメッセージ、主要 exit code、秘密値非露出の回帰テストを整備済み                                       |
-| 11    | 検証と配布確認                             | 一部完了     | モック自動テスト、packaged CLI smoke、Windows での real-store smoke 通過までは完了。`darwin` / `linux` での確認は未完了 |
+| Phase | 内容                                       | 状態     | 補足                                                                                                                 |
+| ----- | ------------------------------------------ | -------- | -------------------------------------------------------------------------------------------------------------------- |
+| 1     | TypeScript / ESM / Vitest / npm の実装基盤 | 完了     | `package.json`、`tsconfig.json`、`vitest.config.ts`、CLI entry を作成済み                                            |
+| 2     | Secret Store 選定スパイク                  | 完了     | 初回リリース向けに `keytar` 採用を決定済み。実 OS スモーク結果の収集は検証フェーズで継続する                         |
+| 3     | config / ID / ルート探索の純粋ロジック     | 完了     | `.dotenvx-keychain` 読み書き、ID 検証、自動生成、親探索を実装済み                                                    |
+| 4     | CLI runtime 共通部                         | 完了     | 引数解析、dispatcher、終了コード、Windows シェル判定ロジックを実装済み                                               |
+| 5     | Secret Store 抽象とバックエンド            | 完了     | interface、factory、mock backend、`keytar` backend を実装済み                                                        |
+| 6     | `dotenvx` resolver / adapter               | 完了     | 同梱依存の解決と `keypair DOTENV_PRIVATE_KEY` 読み取りを実装済み                                                     |
+| 7     | `init` 統合                                | 完了     | 鍵ソース優先順位、rollback、`.env.keys` cleanup、exit code を実装済み                                                |
+| 8     | `run` 統合                                 | 完了     | pre-injection bypass、config 解決、auto ID fallback、子終了コード伝播を実装済み                                      |
+| 9     | `list` / `remove`                          | 完了     | 昇順列挙、完全一致削除、not-found の exit `3` を実装済み                                                             |
+| 10    | エラー / セキュリティ整備                  | 完了     | 秘密値非表示、短いメッセージ、主要 exit code、秘密値非露出の回帰テストを整備済み                                     |
+| 11    | 検証と配布確認                             | 一部完了 | モック自動テスト、packaged CLI smoke、Windows と Linux での real-store smoke 通過までは完了。`darwin` の確認は未完了 |
 
 ## 4. 実装済みの主要範囲
 
@@ -122,6 +128,21 @@
 - `vitest run test/commands/init.test.ts test/commands/run.test.ts`:
   2026-06-24 時点で 13 tests が通過し、`secret-store`、親環境、
   ローカル `dotenvx` 読み取りの各経路で秘密値非露出を回帰確認した。
+- Linux unavailable path:
+  2026-06-24 に Ubuntu 24.04.1 LTS on WSL2 上で、`npm run test:real-store-smoke` は
+  `libsecret-1.so.0` 不在により `Failed to load the native secret store backend.` で失敗した。
+  同日に `node dist/index.js ls` と、親環境に `DOTENV_PRIVATE_KEY` を与えた
+  `node dist/index.js init` を確認し、どちらも exit `4` で
+  Linux 向けの復旧案内を返し、秘密値非露出かつ `.dotenvx-keychain` 未作成で失敗することを確認した。
+- Linux real-store success path:
+  2026-06-24 に Ubuntu 24.04.1 LTS on WSL2 上で、`libsecret-1.so.0` と
+  `gnome-keyring` 導入後、ambient user session の既定 collection は壊れた alias 状態のまま
+  `Object does not exist at path "/org/freedesktop/secrets/collection/login"` で失敗した。
+  一方で isolated `dbus-run-session` と一時 HOME を使い、
+  `gnome-keyring-daemon --login` と
+  `gnome-keyring-daemon --start --components=secrets` で login collection を初期化した session では、
+  `secret-tool` の store / lookup / clear と
+  `npm run test:real-store-smoke` の `set/get/list/remove` が通過した。
 
 ## 6. 未完了と残項目
 
@@ -130,7 +151,9 @@
 - `darwin`、`win32`、`linux` の各 OS で、
   実ストアを使う `set/get/list/remove` の最小スモークを実行して結果を揃える必要がある。
 - `win32` は 2026-06-12 時点で通過確認済みである。
-- `darwin` と `linux` は未確認である。
+- `linux` は 2026-06-24 時点で unavailable path と、isolated D-Bus session での
+  success path の両方を確認済みである。
+- `darwin` は未確認である。
 
 ## 7. 決定済み方針
 
@@ -157,13 +180,9 @@
 
 1. `npm run test:real-store-smoke` を `darwin` で実行し、
    実ストアに対する `set/get/list/remove` の結果を記録する。
-2. `npm run test:real-store-smoke` を `linux` で実行し、
-   Secret Service 利用可能環境での結果を記録する。
-3. 上記結果を実装メモや README に反映し、
-   各 OS での既知の前提条件と制約を明確にする。
-4. リリース候補に対して、`npm run format:check`、`npm run lint`、
+2. リリース候補に対して、`npm run format:check`、`npm run lint`、
    `npm run typecheck`、`npm test`、`npm run build`、`npm run pack:smoke` を実行する。
-5. リリース作業を行う OS では、上記に加えて
+3. リリース作業を行う OS では、上記に加えて
    `npm run test:real-store-smoke` も再実行し、直前確認を残す。
 
 ### 8.2 初回リリース判断の目安
@@ -172,8 +191,8 @@
 - README だけで、初回利用者が `init` から `run` まで辿れる。
 - tarball install 後も `dotenvx-keychain` と `dxk` の両方が起動し、
   同梱 `dotenvx` 解決が維持されている。
-- Linux の Secret Service 利用不可ケースの扱いが、
-  README または運用メモで明示されている。
+- Linux の Secret Service / `libsecret` 利用不可ケースの扱いが、
+  README、`linux-secret-service.md`、または運用メモで明示されている。
 - PR CI の必須 gate と release 前の native-store 確認の役割分担が明示されている。
 
 ## 9. 初回リリース後の将来検討項目
@@ -181,7 +200,7 @@
 - GitHub Actions などでの継続 CI と required status checks の整備。
 - 実ストア smoke の OS マトリクス自動化。
 - 実ストア smoke を常時 PR CI に昇格させるかの再評価。
-- `darwin` と `linux` の real-store smoke 結果、および
+- `darwin` の real-store smoke 結果、および
   ネイティブ依存の配布・保守性に関する懸念は、
   初回リリース後の検討項目として残す。
 - `keytar` の保守継続性と、Node.js / OS 更新に対する追従状況の定期確認。

@@ -7,7 +7,9 @@ import { afterEach, describe, expect, it } from "vitest";
 import { CONFIG_FILE_NAME, writeConfig } from "../../src/config/configFile.js";
 import { initCommand } from "../../src/commands/init.js";
 import type { DotenvxAdapter } from "../../src/dotenvx/adapter.js";
+import { SecretStoreError } from "../../src/secretStore/interface.js";
 import { MockSecretStore } from "../../src/secretStore/mock/mockSecretStore.js";
+import { formatSecretStoreUnavailableMessage } from "../../src/secretStore/userMessages.js";
 
 const tempDirectories: string[] = [];
 
@@ -236,5 +238,37 @@ describe("initCommand", () => {
 
     expect(exitCode).toBe(3);
     expect(output.stderr[0]).toBe("No key found for id: app-a");
+  });
+
+  it("fails safely when the native secret store is unavailable", async () => {
+    const directory = await createTempDirectory();
+    const output = createOutputCapture();
+
+    const exitCode = await initCommand(
+      { id: "app-a" },
+      {
+        cwd: directory,
+        env: {
+          DOTENV_PRIVATE_KEY: "from-env",
+        },
+        stdout: output.emitStdout,
+        stderr: output.emitStderr,
+        secretStoreFactory: {
+          create: async () => {
+            throw new SecretStoreError(
+              "backend-unavailable",
+              "backend unavailable",
+            );
+          },
+        },
+        dotenvxAdapter: createDotenvxAdapter(async () => null),
+      },
+    );
+
+    expect(exitCode).toBe(4);
+    expect(output.stderr).toEqual([formatSecretStoreUnavailableMessage()]);
+    expect([...output.stdout, ...output.stderr].join("\n")).not.toContain(
+      "from-env",
+    );
   });
 });
