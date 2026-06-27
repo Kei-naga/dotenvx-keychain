@@ -46,7 +46,8 @@ Approvals stay at `0` for now so the repository remains usable in solo
 maintenance. Raise them when multiple maintainers are active.
 
 Required status checks should use the three CI job checks emitted by
-[`CI`](../.github/workflows/ci.yml): `quality`, `test`, and `package`.
+[`CI`](../.github/workflows/ci.yml): `quality`, `test`, `package`, and
+`linux-real-store-smoke`.
 
 ## Testing Policy
 
@@ -71,6 +72,7 @@ Current local baseline commands:
 - `npm run build`
 - `npm run pack:dry-run`
 - `npm run pack:smoke`
+- `npm run test:real-store-smoke:linux`
 
 ### Minimum unit-test targets
 
@@ -96,12 +98,13 @@ Current local baseline commands:
 
 ### Manual checks allowed at first
 
-- real macOS Keychain, Windows Credential Manager, and Linux Secret Service
-  behavior can stay as release-gated manual smoke tests until the CI matrix is
-  ready
+- real macOS Keychain and Windows Credential Manager behavior can stay as
+  release-gated manual smoke tests until their CI coverage is ready
+- Linux Secret Service is exercised automatically on GitHub-hosted Ubuntu by
+  provisioning `libsecret`, `gnome-keyring`, and an isolated D-Bus session
 - before publishing a tagged release, rerun `npm run test:real-store-smoke` on
-  the release machine and keep win32 / darwin / linux native-store sign-off
-  outside GitHub-hosted runners for now
+  the release machine and keep win32 / darwin native-store sign-off outside
+  GitHub-hosted runners for now
 
 For Linux / WSL environment prerequisites and the verified Secret Service smoke
 flow, refer to [linux-secret-service.md](./linux-secret-service.md).
@@ -112,8 +115,8 @@ flow, refer to [linux-secret-service.md](./linux-secret-service.md).
   [spec.md](./spec.md)
 - secret values must never appear in snapshots, assertion messages, or failure
   output
-- keep the `quality`, `test`, and `package` CI job checks required on
-  `develop` and `main`
+- keep the `quality`, `test`, `package`, and `linux-real-store-smoke` CI job
+  checks required on `develop` and `main`
 
 ## GitHub Actions
 
@@ -121,10 +124,10 @@ flow, refer to [linux-secret-service.md](./linux-secret-service.md).
   requests into and pushes to `develop` and `main`
 - the CI workflow enforces `npm run format:check`, `npm run lint`,
   `npm run typecheck`, `npm test`, `npm run build`, `npm run pack:dry-run`,
-  and `npm run pack:smoke`
+  `npm run pack:smoke`, and `npm run test:real-store-smoke:linux`
 - [`.github/workflows/release-prep.yml`](../.github/workflows/release-prep.yml)
-  runs on SemVer tags and optional manual dispatch, reruns the CI gate, and
-  uploads a release tarball artifact
+  runs on SemVer tags and optional manual dispatch, reruns the CI gate plus
+  the Linux real-store smoke, and uploads a release tarball artifact
 - `release-prep` does not publish to npm; maintainers must complete the manual
   native-store smoke gate before tagging a release from the merged `main`
   commit
@@ -133,7 +136,7 @@ flow, refer to [linux-secret-service.md](./linux-secret-service.md).
 
 - Limit PRs into `main` to `develop`, `release/*`, and `hotfix/*`.
 - Require CODEOWNERS review.
-- Promote real-store smoke into a GitHub-hosted CI matrix.
+- Promote darwin / win32 real-store smoke into CI coverage.
 - Automate npm publish.
 
 ## Review This Strategy When
@@ -141,5 +144,5 @@ flow, refer to [linux-secret-service.md](./linux-secret-service.md).
 - more people are developing in parallel
 - `main` needs one or more required approvals
 - maintenance branches become necessary
-- native-store smoke is stable enough for a cross-platform CI matrix
+- darwin / win32 native-store smoke is stable enough for CI coverage
 - release preparation should draft GitHub Releases or publish to npm

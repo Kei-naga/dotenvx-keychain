@@ -17,10 +17,20 @@ jobs:
   release-prep:
     name: release-prep
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 40
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Install Linux secret store dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            dbus-x11 \
+            gnome-keyring \
+            libsecret-1-0 \
+            libsecret-1-dev \
+            libsecret-tools
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -43,6 +53,9 @@ jobs:
 
       - name: Run test suite
         run: npm test
+
+      - name: Run Linux real-store smoke
+        run: npm run test:real-store-smoke:linux
 
       - name: Build
         run: npm run build
@@ -73,6 +86,7 @@ jobs:
             echo '## Manual release gate'
             echo ''
             echo '- Before npm publish, rerun `npm run test:real-store-smoke` on the release machine.'
-            echo '- Keep manual sign-off for the win32, darwin, and linux native-store paths until the CI matrix is ready.'
+            echo '- This workflow now exercises the native Linux Secret Service path on ubuntu-latest.'
+            echo '- Keep manual sign-off for the win32 and darwin native-store paths until their CI coverage is ready.'
             echo '- SemVer tags should be created from the merged `main` commit after that sign-off is complete.'
           } >> "$GITHUB_STEP_SUMMARY"
