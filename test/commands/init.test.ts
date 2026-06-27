@@ -59,6 +59,12 @@ function createMissingFileError(): NodeJS.ErrnoException {
   return error;
 }
 
+function createPermissionDeniedError(): NodeJS.ErrnoException {
+  const error = new Error("permission denied") as NodeJS.ErrnoException;
+  error.code = "EACCES";
+  return error;
+}
+
 afterEach(async () => {
   await Promise.all(
     tempDirectories
@@ -199,6 +205,49 @@ describe("initCommand", () => {
     );
   });
 
+  it("returns exit 4 when reading the existing .env for bootstrap rollback fails", async () => {
+    const directory = await createTempDirectory();
+    const store = new MockSecretStore();
+    const output = createOutputCapture();
+    let readCalls = 0;
+
+    const exitCode = await initCommand(
+      { id: "app-a" },
+      {
+        cwd: directory,
+        stdout: output.emitStdout,
+        stderr: output.emitStderr,
+        secretStoreFactory: {
+          create: async () => store,
+        },
+        dotenvxAdapter: createDotenvxAdapter(
+          async () => null,
+          async () => ({
+            privateKey: "generated-private-key",
+            encryptedEnvContents:
+              'DOTENV_PUBLIC_KEY="public"\nHELLO=encrypted:value\n',
+          }),
+        ),
+        readTextFile: async () => {
+          readCalls += 1;
+
+          if (readCalls === 1) {
+            return "HELLO=world\n";
+          }
+
+          throw createPermissionDeniedError();
+        },
+      },
+    );
+
+    expect(exitCode).toBe(4);
+    await expect(store.get("app-a")).resolves.toBeNull();
+    expect(output.stderr).toEqual(["Failed to read project env: .env"]);
+    expect([...output.stdout, ...output.stderr].join("\n")).not.toContain(
+      "generated-private-key",
+    );
+  });
+
   it("restores the original .env when bootstrap succeeds but config writing fails", async () => {
     const directory = await createTempDirectory();
     const envPath = path.join(directory, ".env");
@@ -277,6 +326,54 @@ describe("initCommand", () => {
       "No reusable key was found for the existing encrypted .env.",
       "Provide DOTENV_PRIVATE_KEY or restore .env.keys before running init again.",
     ]);
+    await expect(readFile(envPath, "utf8")).resolves.toBe(
+      'DOTENV_PUBLIC_KEY="public"\nHELLO=encrypted:value\n',
+    );
+  });
+
+  it("bootstraps when a plaintext .env only mentions encrypted markers", async () => {
+    const directory = await createTempDirectory();
+    const envPath = path.join(directory, ".env");
+    const store = new MockSecretStore();
+    const output = createOutputCapture();
+    let bootstrapCalls = 0;
+
+    await writeFile(
+      envPath,
+      [
+        "# DOTENV_PUBLIC_KEY=mentioned-in-comment",
+        "MESSAGE=DOTENV_PUBLIC_KEY is documented here",
+        "NOTE=plaintext example with =encrypted: in the middle",
+        "HELLO=world",
+        "",
+      ].join("\n"),
+      "utf8",
+    );
+
+    const exitCode = await initCommand(
+      { id: "app-a" },
+      {
+        cwd: directory,
+        stdout: output.emitStdout,
+        stderr: output.emitStderr,
+        secretStoreFactory: {
+          create: async () => store,
+        },
+        dotenvxAdapter: createDotenvxAdapter(async () => null, async () => {
+          bootstrapCalls += 1;
+          return {
+            privateKey: "generated-private-key",
+            encryptedEnvContents:
+              'DOTENV_PUBLIC_KEY="public"\nHELLO=encrypted:value\n',
+          };
+        }),
+      },
+    );
+
+    expect(exitCode).toBe(0);
+    expect(bootstrapCalls).toBe(1);
+    await expect(store.get("app-a")).resolves.toBe("generated-private-key");
+    expect(output.stderr).toEqual([]);
     await expect(readFile(envPath, "utf8")).resolves.toBe(
       'DOTENV_PUBLIC_KEY="public"\nHELLO=encrypted:value\n',
     );

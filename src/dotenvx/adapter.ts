@@ -124,7 +124,7 @@ function createSanitizedEnv(baseEnv: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
 }
 
 function shouldSeedPlaceholderEnv(sourceEnvContents: string | null): boolean {
-  return sourceEnvContents === null || sourceEnvContents.length === 0;
+  return sourceEnvContents === null || sourceEnvContents.trim().length === 0;
 }
 
 function stripBootstrapPlaceholder(contents: string): string {

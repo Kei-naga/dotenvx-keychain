@@ -102,9 +102,26 @@ function isEncryptedEnvFile(contents: string | null): boolean {
     return false;
   }
 
-  return (
-    contents.includes("DOTENV_PUBLIC_KEY") || contents.includes("=encrypted:")
-  );
+  return contents.split(/\r?\n/u).some((line) => {
+    const trimmedLine = line.trim();
+
+    if (trimmedLine === "" || trimmedLine.startsWith("#")) {
+      return false;
+    }
+
+    if (/^(?:export\s+)?DOTENV_PUBLIC_KEY\s*=/.test(trimmedLine)) {
+      return true;
+    }
+
+    const separatorIndex = trimmedLine.indexOf("=");
+
+    if (separatorIndex === -1) {
+      return false;
+    }
+
+    const value = trimmedLine.slice(separatorIndex + 1).trimStart();
+    return value.startsWith("encrypted:");
+  });
 }
 
 function formatSecretStoreError(error: unknown): string {
@@ -301,9 +318,17 @@ export async function initCommand(
   const shouldWriteBootstrapEnv =
     resolvedKey.source === "bootstrap" &&
     resolvedKey.encryptedEnvContents !== null;
-  const previousEnvContents = shouldWriteBootstrapEnv
-    ? await readOptionalTextFile(envPath, readTextFileImpl)
-    : null;
+  let previousEnvContents: string | null = null;
+
+  if (shouldWriteBootstrapEnv) {
+    try {
+      previousEnvContents = await readOptionalTextFile(envPath, readTextFileImpl);
+    } catch {
+      stderr("Failed to read project env: .env");
+      return CLI_EXIT_CODE.infrastructure;
+    }
+  }
+
   let envWriteAttempted = false;
   let envRollbackFailed = false;
 

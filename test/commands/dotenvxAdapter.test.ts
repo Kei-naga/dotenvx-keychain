@@ -75,4 +75,33 @@ describe("DefaultDotenvxAdapter", () => {
     await expect(access(path.join(directory, ".env"))).rejects.toBeTruthy();
     await expect(access(path.join(directory, ".env.keys"))).rejects.toBeTruthy();
   });
+
+  it("treats whitespace-only .env as empty during bootstrap", async () => {
+    const directory = await createTempDirectory();
+    const envPath = path.join(directory, ".env");
+    const adapter = new DefaultDotenvxAdapter(
+      undefined,
+      undefined,
+      {
+        ...process.env,
+        DXK_SENTINEL: "should_not_leak",
+      },
+    );
+
+    await writeFile(envPath, " \n\t", "utf8");
+
+    const result = await adapter.bootstrapProjectEnv(directory);
+
+    expect(result.privateKey.length).toBeGreaterThan(0);
+    expect(result.encryptedEnvContents).toContain("DOTENV_PUBLIC_KEY");
+    expect(result.encryptedEnvContents).not.toContain(
+      "DXK_BOOTSTRAP_PLACEHOLDER",
+    );
+    expect(result.encryptedEnvContents).not.toContain("DXK_SENTINEL");
+    expect(result.encryptedEnvContents).not.toContain("PATH=");
+    expect(result.encryptedEnvContents).not.toContain("HOME=");
+    expect(result.encryptedEnvContents).not.toContain("should_not_leak");
+    await expect(readFile(envPath, "utf8")).resolves.toBe(" \n\t");
+    await expect(access(path.join(directory, ".env.keys"))).rejects.toBeTruthy();
+  });
 });
