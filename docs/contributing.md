@@ -138,6 +138,8 @@ flow, refer to [linux-secret-service.md](./linux-secret-service.md).
 - on the release candidate, run `npm run format:check`, `npm run lint`,
   `npm run typecheck`, `npm test`, `npm run build`, `npm run pack:dry-run`,
   and `npm run pack:smoke`
+- use `npm run release:prepare -- <version>` when you want one clean entry
+  point for that local gate plus the release-machine `npm run test:real-store-smoke`
 - rerun `npm run test:real-store-smoke` on the release machine before publish
 - keep manual win32 / darwin native-store sign-off until CI coverage exists
 - create the SemVer tag from the merged `main` commit only after that sign-off

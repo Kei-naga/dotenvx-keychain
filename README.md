@@ -114,7 +114,12 @@ npm run build
 npm run pack:smoke
 npm run test:real-store-smoke
 npm run test:real-store-smoke:wsl
+npm run release:prepare -- 0.1.0
 ```
+
+`npm run release:prepare -- <version>` expects a clean working tree, reruns the
+local release-candidate gate, reruns `npm run test:real-store-smoke` on the
+current machine, and prints the next `main` / tag / publish steps.
 
 Command selection:
 
