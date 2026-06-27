@@ -34,6 +34,46 @@ describe("DefaultDotenvxAdapter", () => {
     await expect(adapter.readPrivateKey(directory)).resolves.toBeNull();
   });
 
+  it("fails when dotenvx keypair returns empty output for a local key read", async () => {
+    const directory = await createTempDirectory();
+    const envPath = path.join(directory, ".env");
+    const adapter = new DefaultDotenvxAdapter(
+      async () => "dotenvx.js",
+      async () => ({
+        exitCode: 0,
+        signal: null,
+        stdout: "",
+        stderr: "",
+      }),
+    );
+
+    await writeFile(envPath, "HELLO=world\n", "utf8");
+
+    await expect(adapter.readPrivateKey(directory)).rejects.toThrow(
+      "dotenvx returned an unexpected key output.",
+    );
+  });
+
+  it("fails when dotenvx keypair returns multiple lines for a local key read", async () => {
+    const directory = await createTempDirectory();
+    const envPath = path.join(directory, ".env");
+    const adapter = new DefaultDotenvxAdapter(
+      async () => "dotenvx.js",
+      async () => ({
+        exitCode: 0,
+        signal: null,
+        stdout: "first\nsecond\n",
+        stderr: "",
+      }),
+    );
+
+    await writeFile(envPath, "HELLO=world\n", "utf8");
+
+    await expect(adapter.readPrivateKey(directory)).rejects.toThrow(
+      "dotenvx returned an unexpected key output.",
+    );
+  });
+
   it("bootstraps a plaintext .env without mutating the project root", async () => {
     const directory = await createTempDirectory();
     const envPath = path.join(directory, ".env");

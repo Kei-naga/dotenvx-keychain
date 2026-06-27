@@ -73,23 +73,28 @@ async function readOptionalFile(filePath: string): Promise<string | null> {
   }
 }
 
-function parseSingleLineValue(stdout: string): string | null {
+type ParsedSingleLineValue =
+  | { kind: "invalid" }
+  | { kind: "missing" }
+  | { kind: "value"; value: string };
+
+function parseSingleLineValue(stdout: string): ParsedSingleLineValue {
   const lines = stdout
     .split(/\r?\n/u)
     .map((line) => line.trim())
     .filter((line) => line.length > 0);
 
   if (lines.length !== 1) {
-    return null;
+    return { kind: "invalid" };
   }
 
   const value = lines[0] ?? null;
 
   if (value === null || value === "null") {
-    return null;
+    return { kind: "missing" };
   }
 
-  return value;
+  return { kind: "value", value };
 }
 
 function createSanitizedEnv(baseEnv: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
@@ -198,7 +203,19 @@ export class DefaultDotenvxAdapter implements DotenvxAdapter {
       );
     }
 
-    return parseSingleLineValue(result.stdout);
+    const privateKey = parseSingleLineValue(result.stdout);
+
+    if (privateKey.kind === "missing") {
+      return null;
+    }
+
+    if (privateKey.kind === "invalid") {
+      throw new DotenvxAdapterError(
+        "dotenvx returned an unexpected key output.",
+      );
+    }
+
+    return privateKey.value;
   }
 
   public async bootstrapProjectEnv(
@@ -262,13 +279,13 @@ export class DefaultDotenvxAdapter implements DotenvxAdapter {
 
     const privateKey = parseSingleLineValue(result.stdout);
 
-    if (!privateKey) {
+    if (privateKey.kind !== "value") {
       throw new DotenvxAdapterError(
         "dotenvx returned an unexpected key output.",
       );
     }
 
-    return privateKey;
+    return privateKey.value;
   }
 
   private async runDotenvx(
