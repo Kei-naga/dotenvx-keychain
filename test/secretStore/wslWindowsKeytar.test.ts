@@ -98,12 +98,12 @@ describe("WslWindowsKeytar", () => {
     });
 
     await keytar.setPassword("dotenvx-keychain", "app-a", "secret-a");
-    await expect(
-      keytar.getPassword("dotenvx-keychain", "app-a"),
-    ).resolves.toBe("secret-a");
-    await expect(keytar.findCredentials("dotenvx-keychain")).resolves.toEqual(
-      [{ account: "app-a", password: "secret-a" }],
+    await expect(keytar.getPassword("dotenvx-keychain", "app-a")).resolves.toBe(
+      "secret-a",
     );
+    await expect(keytar.findCredentials("dotenvx-keychain")).resolves.toEqual([
+      { account: "app-a", password: "secret-a" },
+    ]);
     await expect(
       keytar.deletePassword("dotenvx-keychain", "app-a"),
     ).resolves.toBe(true);
@@ -152,9 +152,7 @@ describe("WslWindowsKeytar", () => {
 
     await expect(
       keytar.setPassword("dotenvx-keychain", "app-a", "secret-a"),
-    ).rejects.toThrow(
-      "Credential Manager operation failed: Bridge failed",
-    );
+    ).rejects.toThrow("Credential Manager operation failed: Bridge failed");
   });
 
   it("rejects invalid bridge output", async () => {

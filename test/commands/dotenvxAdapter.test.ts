@@ -1,4 +1,11 @@
-import { access, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
+import {
+  access,
+  mkdtemp,
+  readFile,
+  realpath,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -87,19 +94,17 @@ describe("DefaultDotenvxAdapter", () => {
     expect(result.encryptedEnvContents).toContain("DOTENV_PUBLIC_KEY");
     expect(result.encryptedEnvContents).not.toContain("HELLO=world");
     await expect(readFile(envPath, "utf8")).resolves.toBe("HELLO=world\n");
-    await expect(access(path.join(directory, ".env.keys"))).rejects.toBeTruthy();
+    await expect(
+      access(path.join(directory, ".env.keys")),
+    ).rejects.toBeTruthy();
   });
 
   it("sanitizes ambient environment during empty-project bootstrap", async () => {
     const directory = await createTempDirectory();
-    const adapter = new DefaultDotenvxAdapter(
-      undefined,
-      undefined,
-      {
-        ...process.env,
-        DXK_SENTINEL: "should_not_leak",
-      },
-    );
+    const adapter = new DefaultDotenvxAdapter(undefined, undefined, {
+      ...process.env,
+      DXK_SENTINEL: "should_not_leak",
+    });
 
     const result = await adapter.bootstrapProjectEnv(directory);
 
@@ -113,20 +118,18 @@ describe("DefaultDotenvxAdapter", () => {
     expect(result.encryptedEnvContents).not.toContain("HOME=");
     expect(result.encryptedEnvContents).not.toContain("should_not_leak");
     await expect(access(path.join(directory, ".env"))).rejects.toBeTruthy();
-    await expect(access(path.join(directory, ".env.keys"))).rejects.toBeTruthy();
+    await expect(
+      access(path.join(directory, ".env.keys")),
+    ).rejects.toBeTruthy();
   });
 
   it("treats whitespace-only .env as empty during bootstrap", async () => {
     const directory = await createTempDirectory();
     const envPath = path.join(directory, ".env");
-    const adapter = new DefaultDotenvxAdapter(
-      undefined,
-      undefined,
-      {
-        ...process.env,
-        DXK_SENTINEL: "should_not_leak",
-      },
-    );
+    const adapter = new DefaultDotenvxAdapter(undefined, undefined, {
+      ...process.env,
+      DXK_SENTINEL: "should_not_leak",
+    });
 
     await writeFile(envPath, " \n\t", "utf8");
 
@@ -142,6 +145,8 @@ describe("DefaultDotenvxAdapter", () => {
     expect(result.encryptedEnvContents).not.toContain("HOME=");
     expect(result.encryptedEnvContents).not.toContain("should_not_leak");
     await expect(readFile(envPath, "utf8")).resolves.toBe(" \n\t");
-    await expect(access(path.join(directory, ".env.keys"))).rejects.toBeTruthy();
+    await expect(
+      access(path.join(directory, ".env.keys")),
+    ).rejects.toBeTruthy();
   });
 });

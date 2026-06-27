@@ -51,8 +51,7 @@ export async function createSecretStore(
 
   switch (platform) {
     case "darwin":
-    case "win32":
-    {
+    case "win32": {
       const loadKeytar = options.loadKeytar ?? loadKeytarModule;
       const store = new KeytarSecretStore(await loadKeytar());
       await store.probe();

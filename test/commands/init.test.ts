@@ -309,14 +309,17 @@ describe("initCommand", () => {
         secretStoreFactory: {
           create: async () => store,
         },
-        dotenvxAdapter: createDotenvxAdapter(async () => null, async () => {
-          bootstrapCalls += 1;
-          return {
-            privateKey: "generated-private-key",
-            encryptedEnvContents:
-              'DOTENV_PUBLIC_KEY="public"\nHELLO=encrypted:new-value\n',
-          };
-        }),
+        dotenvxAdapter: createDotenvxAdapter(
+          async () => null,
+          async () => {
+            bootstrapCalls += 1;
+            return {
+              privateKey: "generated-private-key",
+              encryptedEnvContents:
+                'DOTENV_PUBLIC_KEY="public"\nHELLO=encrypted:new-value\n',
+            };
+          },
+        ),
       },
     );
 
@@ -359,14 +362,17 @@ describe("initCommand", () => {
         secretStoreFactory: {
           create: async () => store,
         },
-        dotenvxAdapter: createDotenvxAdapter(async () => null, async () => {
-          bootstrapCalls += 1;
-          return {
-            privateKey: "generated-private-key",
-            encryptedEnvContents:
-              'DOTENV_PUBLIC_KEY="public"\nHELLO=encrypted:value\n',
-          };
-        }),
+        dotenvxAdapter: createDotenvxAdapter(
+          async () => null,
+          async () => {
+            bootstrapCalls += 1;
+            return {
+              privateKey: "generated-private-key",
+              encryptedEnvContents:
+                'DOTENV_PUBLIC_KEY="public"\nHELLO=encrypted:value\n',
+            };
+          },
+        ),
       },
     );
 

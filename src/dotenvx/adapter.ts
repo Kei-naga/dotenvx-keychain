@@ -231,7 +231,11 @@ export class DefaultDotenvxAdapter implements DotenvxAdapter {
 
     try {
       if (tempEnvContents !== null) {
-        await writeFile(path.join(tempProjectRoot, ".env"), tempEnvContents, "utf8");
+        await writeFile(
+          path.join(tempProjectRoot, ".env"),
+          tempEnvContents,
+          "utf8",
+        );
       }
 
       const encryptResult = await this.runDotenvx(["encrypt"], tempProjectRoot);
@@ -265,7 +269,9 @@ export class DefaultDotenvxAdapter implements DotenvxAdapter {
     }
   }
 
-  private async readPrivateKeyFromProject(projectRoot: string): Promise<string> {
+  private async readPrivateKeyFromProject(
+    projectRoot: string,
+  ): Promise<string> {
     const result = await this.runDotenvx(
       ["keypair", "DOTENV_PRIVATE_KEY"],
       projectRoot,
