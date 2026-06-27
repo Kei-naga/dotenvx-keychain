@@ -9,8 +9,14 @@ describe("formatSecretStoreUnavailableMessage", () => {
     );
   });
 
-  it("returns the generic message for non-Linux platforms", () => {
+  it("returns macOS guidance for darwin platforms", () => {
     expect(formatSecretStoreUnavailableMessage("darwin")).toBe(
+      "The native secret store is unavailable. On macOS, verify that you are running in a logged-in user session, the login keychain is present and unlocked, and Keychain Access can open it.",
+    );
+  });
+
+  it("returns the generic message for other platforms", () => {
+    expect(formatSecretStoreUnavailableMessage("win32")).toBe(
       "The native secret store is unavailable.",
     );
   });

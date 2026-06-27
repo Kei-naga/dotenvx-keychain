@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -13,8 +13,9 @@ const tempDirectories: string[] = [];
 
 async function createTempDirectory(): Promise<string> {
   const directory = await mkdtemp(path.join(tmpdir(), "dxk-run-"));
-  tempDirectories.push(directory);
-  return directory;
+  const canonicalDirectory = await realpath(directory);
+  tempDirectories.push(canonicalDirectory);
+  return canonicalDirectory;
 }
 
 afterEach(async () => {

@@ -49,7 +49,7 @@ npx dxk rm <id>
 ## Platform Notes
 
 - `win32`: uses the native Windows secret store through `keytar`. Real-store smoke has been verified in the current development environment.
-- `darwin`: supported target platform. Real-store smoke still needs to be recorded before initial release.
+- `darwin`: uses the macOS login keychain through `keytar`. Real-store smoke has been verified in the current development environment. If the native secret store is unavailable, verify that you are running in a logged-in user session and that the login keychain is present and unlocked in Keychain Access.
 - `linux`: requires `libsecret-1.so.0`, a working D-Bus session, and a Secret Service compatible environment. The CLI does not fall back to plaintext files or alternate stores when Secret Service is unavailable.
 - other platforms: unsupported and expected to fail explicitly.
 
@@ -110,6 +110,8 @@ Command selection:
 
 - `npm run test:real-store-smoke`: use when the current Linux session already has a working Secret Service collection.
 - `npm run test:real-store-smoke:wsl`: use on WSL when the ambient session does not provide a usable login collection.
+
+On macOS, run `npm run test:real-store-smoke` from a normal logged-in user session with the login keychain unlocked so `keytar` can reach the native keychain APIs.
 
 `npm run test:real-store-smoke` is treated as a release-preflight check rather than a required check on every pull request, because native keychain availability is runner-dependent, especially on Linux.
 

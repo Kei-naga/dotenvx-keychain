@@ -18,9 +18,12 @@
 - Linux では Ubuntu 24.04.1 LTS on WSL2 上で、`libsecret`、`gnome-keyring`、
   login collection を初期化した isolated D-Bus session により、
   実 OS ストア smoke の成功結果も確認済みである。
+- macOS では 2026-06-27 に current development environment 上で、
+  `npm run test:real-store-smoke` による login keychain への
+  `set/get/list/remove` 成功結果を確認済みである。
 - Linux / WSL の環境前提と確認手順は [linux-secret-service.md](../linux-secret-service.md) に集約した。
-- 最大の残項目は、`darwin` で実 OS ストア smoke の結果を揃え、
-  初回リリース前の確認記録を残すことである。
+- 残項目は、リリース候補ごとに通常 gate と native-store smoke を再実行し、
+  直前確認の記録を更新することである。
 
 ## 3. フェーズ別計画と進捗
 
@@ -36,7 +39,7 @@
 | 8     | `run` 統合                                 | 完了     | pre-injection bypass、config 解決、auto ID fallback、子終了コード伝播を実装済み                                      |
 | 9     | `list` / `remove`                          | 完了     | 昇順列挙、完全一致削除、not-found の exit `3` を実装済み                                                             |
 | 10    | エラー / セキュリティ整備                  | 完了     | 秘密値非表示、短いメッセージ、主要 exit code、秘密値非露出の回帰テストを整備済み                                     |
-| 11    | 検証と配布確認                             | 一部完了 | モック自動テスト、packaged CLI smoke、Windows と Linux での real-store smoke 通過までは完了。`darwin` の確認は未完了 |
+| 11    | 検証と配布確認                             | 完了     | モック自動テスト、packaged CLI smoke、Windows / Linux / `darwin` での real-store smoke 結果収集まで完了            |
 
 ## 4. 実装済みの主要範囲
 
@@ -143,17 +146,22 @@
   `gnome-keyring-daemon --start --components=secrets` で login collection を初期化した session では、
   `secret-tool` の store / lookup / clear と
   `npm run test:real-store-smoke` の `set/get/list/remove` が通過した。
+- macOS real-store success path:
+  2026-06-27 に current development environment 上で、
+  Node.js 20.20.2 を使って `npm run test:real-store-smoke` を実行し、
+  login keychain に対する `set/get/list/remove` の最小スモークが通過した。
 
 ## 6. 未完了と残項目
 
 ### 6.1 初回リリース前の残項目
 
-- `darwin`、`win32`、`linux` の各 OS で、
-  実ストアを使う `set/get/list/remove` の最小スモークを実行して結果を揃える必要がある。
 - `win32` は 2026-06-12 時点で通過確認済みである。
+- `darwin` は 2026-06-27 時点で通過確認済みである。
 - `linux` は 2026-06-24 時点で unavailable path と、isolated D-Bus session での
   success path の両方を確認済みである。
-- `darwin` は未確認である。
+- 残りは、リリース候補に対して `npm run format:check`、`npm run lint`、
+  `npm run typecheck`、`npm test`、`npm run build`、`npm run pack:smoke` を実行し、
+  リリース作業を行う OS で `npm run test:real-store-smoke` を再実行して直前確認を残すことである。
 
 ## 7. 決定済み方針
 
@@ -178,11 +186,9 @@
 
 ### 8.1 初回リリース前に完了したい項目
 
-1. `npm run test:real-store-smoke` を `darwin` で実行し、
-   実ストアに対する `set/get/list/remove` の結果を記録する。
-2. リリース候補に対して、`npm run format:check`、`npm run lint`、
+1. リリース候補に対して、`npm run format:check`、`npm run lint`、
    `npm run typecheck`、`npm test`、`npm run build`、`npm run pack:smoke` を実行する。
-3. リリース作業を行う OS では、上記に加えて
+2. リリース作業を行う OS では、上記に加えて
    `npm run test:real-store-smoke` も再実行し、直前確認を残す。
 
 ### 8.2 初回リリース判断の目安
@@ -200,9 +206,7 @@
 - GitHub Actions などでの継続 CI と required status checks の整備。
 - 実ストア smoke の OS マトリクス自動化。
 - 実ストア smoke を常時 PR CI に昇格させるかの再評価。
-- `darwin` の real-store smoke 結果、および
-  ネイティブ依存の配布・保守性に関する懸念は、
-  初回リリース後の検討項目として残す。
+- ネイティブ依存の配布・保守性に関する懸念は、初回リリース後も継続して確認する。
 - `keytar` の保守継続性と、Node.js / OS 更新に対する追従状況の定期確認。
 - `darwin` / `linux` の real-store smoke や配布時トラブルが出た場合の、
   代替 backend 候補の再評価。
