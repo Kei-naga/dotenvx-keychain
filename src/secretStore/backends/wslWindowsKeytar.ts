@@ -1,9 +1,6 @@
 import { spawn } from "node:child_process";
 
-import type {
-  KeytarLike,
-  SecretStoreCredential,
-} from "../interface.js";
+import type { KeytarLike, SecretStoreCredential } from "../interface.js";
 
 type WslCredentialOperation = "set" | "get" | "delete" | "list";
 
@@ -422,8 +419,5 @@ export class WslWindowsKeytar implements KeytarLike {
 export async function createWslWindowsKeytar(
   options: CreateWslWindowsKeytarOptions = {},
 ): Promise<KeytarLike> {
-  return new WslWindowsKeytar(
-    options.powershellCommand,
-    options.runPowerShell,
-  );
+  return new WslWindowsKeytar(options.powershellCommand, options.runPowerShell);
 }

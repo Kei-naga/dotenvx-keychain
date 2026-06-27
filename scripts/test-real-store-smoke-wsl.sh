@@ -20,29 +20,6 @@ for required_command in dbus-run-session gnome-keyring-daemon; do
   fi
 done
 
-work_home="$repo_root/.tmp/wsl-keyring-home"
-keyring_password="${DXK_WSL_KEYRING_PASSWORD:-dxk-linux-smoke}"
+export DXK_LINUX_KEYRING_PASSWORD="${DXK_WSL_KEYRING_PASSWORD:-dxk-linux-smoke}"
 
-rm -rf "$work_home"
-mkdir -p "$work_home/.local/share/keyrings" "$work_home/.config" "$work_home/.cache"
-
-export DXK_WSL_REPO_ROOT="$repo_root"
-export DXK_WSL_KEYRING_HOME="$work_home"
-export DXK_WSL_KEYRING_PASSWORD="$keyring_password"
-export DXK_WSL_USE_LINUX_SECRET_SERVICE="1"
-
-dbus-run-session -- bash -lc '
-set -euo pipefail
-
-export HOME="$DXK_WSL_KEYRING_HOME"
-export XDG_DATA_HOME="$HOME/.local/share"
-export XDG_CONFIG_HOME="$HOME/.config"
-export XDG_CACHE_HOME="$HOME/.cache"
-export DXK_WSL_USE_LINUX_SECRET_SERVICE="$DXK_WSL_USE_LINUX_SECRET_SERVICE"
-
-printf "%s" "$DXK_WSL_KEYRING_PASSWORD" | gnome-keyring-daemon --login >/dev/null
-eval "$(gnome-keyring-daemon --start --components=secrets)"
-
-cd "$DXK_WSL_REPO_ROOT"
-./node_modules/.bin/vitest run test/smoke/realSecretStore.test.ts
-'
+exec bash "$repo_root/scripts/test-real-store-smoke-linux.sh"

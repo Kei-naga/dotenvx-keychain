@@ -242,11 +242,9 @@ describe("runCommand", () => {
   it("returns infrastructure when signal propagation cannot be re-emitted", async () => {
     const directory = await createTempDirectory();
     const output: string[] = [];
-    const killSpy = vi
-      .spyOn(process, "kill")
-      .mockImplementation(() => {
-        throw new Error("unsupported signal");
-      });
+    const killSpy = vi.spyOn(process, "kill").mockImplementation(() => {
+      throw new Error("unsupported signal");
+    });
 
     try {
       const exitCode = await runCommand(

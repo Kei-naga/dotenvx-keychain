@@ -29,6 +29,7 @@
     "pack:dry-run": "npm pack --dry-run",
     "pack:smoke": "npm run build && vitest run test/smoke/packagedCli.test.ts",
     "test": "vitest run test/cli test/commands test/config test/secretStore",
+    "test:real-store-smoke:linux": "bash ./scripts/test-real-store-smoke-linux.sh",
     "test:real-store-smoke": "vitest run test/smoke/realSecretStore.test.ts",
     "test:real-store-smoke:wsl": "bash ./scripts/test-real-store-smoke-wsl.sh",
     "typecheck": "tsc -p tsconfig.json --noEmit"
