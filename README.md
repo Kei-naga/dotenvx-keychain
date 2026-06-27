@@ -55,10 +55,13 @@ npx dxk rm <id>
 
 - `win32`: uses the native Windows secret store through `keytar`. Real-store smoke has been verified in the current development environment.
 - `darwin`: uses the macOS login keychain through `keytar`. Real-store smoke has been verified in the current development environment. If the native secret store is unavailable, verify that you are running in a logged-in user session and that the login keychain is present and unlocked in Keychain Access.
-- `linux`: requires `libsecret-1.so.0`, a working D-Bus session, and a Secret Service compatible environment. The CLI does not fall back to plaintext files or alternate stores when Secret Service is unavailable.
+- `linux` on native Linux: requires `libsecret-1.so.0`, a working D-Bus session, and a Secret Service compatible environment. The CLI does not fall back to plaintext files or alternate stores when Secret Service is unavailable.
+- `linux` on WSL: uses the current Windows user session's Credential Manager through `powershell.exe` interop while still requiring a Linux-native Node.js and npm toolchain inside WSL.
 - other platforms: unsupported and expected to fail explicitly.
 
-## Linux Secret Service Requirements
+## Linux And WSL Requirements
+
+On WSL, the default runtime path uses Windows Credential Manager rather than Linux Secret Service. If the native secret store is unavailable on WSL, verify that `powershell.exe` is reachable from the Linux environment and that the current Windows user session can access Credential Manager.
 
 When Linux reports that the native secret store is unavailable, verify the following before retrying:
 
@@ -73,13 +76,13 @@ On Ubuntu / Debian based environments, the verified package set was:
 sudo apt-get install -y libsecret-1-0 gnome-keyring libsecret-tools
 ```
 
-On headless Linux or WSL sessions, installing `gnome-keyring` may still leave the default collection uninitialized. In the current Ubuntu 24.04.1 WSL2 verification, the real-store smoke passed only after initializing a clean D-Bus session and starting `gnome-keyring-daemon` with the login flow so that `/org/freedesktop/secrets/collection/login` actually existed.
+On headless native Linux sessions, installing `gnome-keyring` may still leave the default collection uninitialized.
 
 If `npm run test:real-store-smoke` fails with `Cannot create an item in a locked collection`, treat it as the same Secret Service prerequisite problem: the default collection exists but is still locked or not fully initialized for the current session.
 
 If those requirements are not met, `init`, `run`, `list`, and `remove` should fail with exit code `4` instead of falling back to plaintext storage.
 
-For the full Linux / WSL setup and verification flow, see [docs/linux-secret-service.md](./docs/linux-secret-service.md).
+For the full native Linux Secret Service flow and the optional forced-Linux diagnostic path on WSL, see [docs/linux-secret-service.md](./docs/linux-secret-service.md).
 
 ## Exit Codes
 
@@ -115,15 +118,15 @@ npm run test:real-store-smoke:wsl
 
 Command selection:
 
-- `npm run test:real-store-smoke`: use when the current Linux session already has a working Secret Service collection.
-- `npm run test:real-store-smoke:wsl`: use on WSL when the ambient session does not provide a usable login collection.
+- `npm run test:real-store-smoke`: use for the default runtime path on macOS, Windows, native Linux, and ambient WSL.
+- `npm run test:real-store-smoke:wsl`: use only when you want to force the native Linux Secret Service path inside an isolated WSL session for diagnostics.
 
 On macOS, run `npm run test:real-store-smoke` from a normal logged-in user session with the login keychain unlocked so `keytar` can reach the native keychain APIs.
 
 `npm run test:real-store-smoke` is treated as a release-preflight check rather than a required check on every pull request, because native keychain availability is runner-dependent, especially on Linux.
 
-On Linux, `npm run test:real-store-smoke` also depends on `libsecret-1.so.0` being present in addition to a usable Secret Service session. When those prerequisites are missing, the built CLI should fail with exit code `4` and print recovery guidance instead of exposing backend internals or falling back to plaintext storage.
+On native Linux, `npm run test:real-store-smoke` depends on `libsecret-1.so.0` being present in addition to a usable Secret Service session. On WSL, the default path depends on `powershell.exe` interop and Windows Credential Manager. When those prerequisites are missing, the built CLI should fail with exit code `4` and print recovery guidance instead of exposing backend internals or falling back to plaintext storage.
 
-One verified Linux path on Ubuntu 24.04.1 WSL2 used an isolated `dbus-run-session` plus `gnome-keyring-daemon --login` and `gnome-keyring-daemon --start --components=secrets` before running `npm run test:real-store-smoke`.
+One verified native-Linux diagnostic path on Ubuntu 24.04.1 WSL2 used an isolated `dbus-run-session` plus `gnome-keyring-daemon --login` and `gnome-keyring-daemon --start --components=secrets` before running `npm run test:real-store-smoke:wsl`.
 
-For WSL specifically, the repository also provides `npm run test:real-store-smoke:wsl`, which wraps that isolated session setup before running the same smoke test.
+For WSL specifically, the repository also provides `npm run test:real-store-smoke:wsl`, which forces the Linux Secret Service backend inside that isolated session for comparison and troubleshooting.

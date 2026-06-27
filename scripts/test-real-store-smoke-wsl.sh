@@ -29,6 +29,7 @@ mkdir -p "$work_home/.local/share/keyrings" "$work_home/.config" "$work_home/.ca
 export DXK_WSL_REPO_ROOT="$repo_root"
 export DXK_WSL_KEYRING_HOME="$work_home"
 export DXK_WSL_KEYRING_PASSWORD="$keyring_password"
+export DXK_WSL_USE_LINUX_SECRET_SERVICE="1"
 
 dbus-run-session -- bash -lc '
 set -euo pipefail
@@ -37,6 +38,7 @@ export HOME="$DXK_WSL_KEYRING_HOME"
 export XDG_DATA_HOME="$HOME/.local/share"
 export XDG_CONFIG_HOME="$HOME/.config"
 export XDG_CACHE_HOME="$HOME/.cache"
+export DXK_WSL_USE_LINUX_SECRET_SERVICE="$DXK_WSL_USE_LINUX_SECRET_SERVICE"
 
 printf "%s" "$DXK_WSL_KEYRING_PASSWORD" | gnome-keyring-daemon --login >/dev/null
 eval "$(gnome-keyring-daemon --start --components=secrets)"

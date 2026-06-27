@@ -132,14 +132,18 @@
   `service` は `dotenvx-keychain`、`account` は `id` とする。
 - Windows では Credential Manager の Generic Credential として保存し、
   `TargetName` は `dotenvx-keychain/<id>` とする。
-- Linux では Secret Service API の既定コレクションに保存し、
+- native Linux では Secret Service API の既定コレクションに保存し、
   少なくとも `service=dotenvx-keychain` と `id=<id>` の属性で
   再検索できるようにする。
+- WSL では現在の Windows ログインユーザーの Credential Manager を使い、
+  `TargetName` は Windows と同じく `dotenvx-keychain/<id>` とする。
 - `list` と `remove` を実装するため、すべてのバックエンドは
   名前空間単位の列挙と ID 完全一致の削除を提供しなければならない。
-- Linux で Secret Service 互換のデーモンまたは既定コレクションが
+- native Linux で Secret Service 互換のデーモンまたは既定コレクションが
   利用できない場合は、未初期化の環境として扱わず、
   バックエンド利用不可エラーとして終了する。
+- WSL で Windows Credential Manager 連携が利用できない場合も、
+  代替ストアへフォールバックせず、バックエンド利用不可エラーとして終了する。
 
 ## 6. ID 仕様
 
@@ -206,6 +210,8 @@
 ### 7.4 プラットフォーム判定とバックエンド抽象
 
 - 実装は `process.platform` に基づいてバックエンドを選択する。
+- `process.platform === "linux"` の場合は、実装詳細として
+  native Linux と WSL を追加判定してよい。
 - シークレットストア連携は `set`、`get`、`list`、`remove` の
   4 操作を持つ共通抽象で包む。
 - CLI 本体は OS 固有 API を直接分岐せず、
@@ -215,15 +221,19 @@
 - ネイティブストア初期化に失敗した場合は、
   平文ファイル、別環境変数、メモリキャッシュへのフォールバックを行わない。
 
-### 7.5 Linux バックエンドの前提条件
+### 7.5 Linux / WSL バックエンドの前提条件
 
-- Linux の対応条件は Secret Service API 互換実装と、
+- native Linux の対応条件は Secret Service API 互換実装と、
   書き込み可能な既定コレクションが利用可能であることとする。
 - 代表例として GNOME Keyring などを想定するが、
   実装は製品名ではなく Secret Service 互換性で判断する。
 - D-Bus セッション不在、既定コレクション未作成、
   コレクションのアンロック不能などで利用できない場合は、
   解決手順を含むエラーメッセージを返して終了する。
+- WSL の対応条件は Linux 側から `powershell.exe` を起動でき、
+  現在の Windows ログインユーザーの Credential Manager へ到達できることとする。
+- WSL でその条件を満たさない場合も、平文ファイルや Linux Secret Service への
+  自動フォールバックは行わず、解決手順を含むエラーメッセージを返して終了する。
 
 ### 7.6 推奨実装方針
 
@@ -535,7 +545,8 @@ dxk rm <id>
   CLI 実行に必要な成果物、README、LICENSE が含まれる。
 - 鍵が存在しない状態で `run` を実行すると、
   `init` を促す非 0 終了になる。
-- Linux で Secret Service が利用できない状態では、
+- native Linux で Secret Service が利用できない状態、または
+  WSL で Windows Credential Manager 連携が利用できない状態では、
   平文へフォールバックせず、原因を示す非 0 終了になる。
 - 未対応プラットフォームでは、
   すべてのコマンドが明示的な未対応エラーで終了する。

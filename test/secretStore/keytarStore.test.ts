@@ -127,4 +127,43 @@ describe("createSecretStore", () => {
     expect(keytar.findCredentialsCalls).toBe(1);
     await expect(store.list()).resolves.toEqual([]);
   });
+
+  it("uses the WSL backend when Linux is running under WSL", async () => {
+    const wslKeytar = new FakeKeytar();
+    let nativeKeytarLoads = 0;
+
+    const store = await createSecretStore("linux", {
+      detectWsl: () => true,
+      loadKeytar: async () => {
+        nativeKeytarLoads += 1;
+        return new FakeKeytar();
+      },
+      createWslKeytar: async () => wslKeytar,
+    });
+
+    expect(nativeKeytarLoads).toBe(0);
+    expect(wslKeytar.findCredentialsCalls).toBe(1);
+    await expect(store.list()).resolves.toEqual([]);
+  });
+
+  it("allows WSL to force the native Linux backend for diagnostics", async () => {
+    const nativeKeytar = new FakeKeytar();
+    let wslKeytarLoads = 0;
+
+    const store = await createSecretStore("linux", {
+      env: {
+        DXK_WSL_USE_LINUX_SECRET_SERVICE: "1",
+      },
+      detectWsl: () => true,
+      loadKeytar: async () => nativeKeytar,
+      createWslKeytar: async () => {
+        wslKeytarLoads += 1;
+        return new FakeKeytar();
+      },
+    });
+
+    expect(wslKeytarLoads).toBe(0);
+    expect(nativeKeytar.findCredentialsCalls).toBe(1);
+    await expect(store.list()).resolves.toEqual([]);
+  });
 });
