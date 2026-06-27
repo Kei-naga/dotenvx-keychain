@@ -4,7 +4,7 @@
 in native OS secret stores instead of keeping plaintext key material in the working
 tree.
 
-The implementation is in progress. Product and design documents live under `docs/`.
+Behavior, design, and release workflow documents live under `docs/`.
 
 ## Quick Start
 

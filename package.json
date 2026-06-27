@@ -2,6 +2,21 @@
   "name": "dotenvx-keychain",
   "version": "0.1.0",
   "description": "CLI wrapper that stores DOTENV_PRIVATE_KEY in native OS secret stores for dotenvx projects.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Kei-naga/dotenvx-keychain.git"
+  },
+  "homepage": "https://github.com/Kei-naga/dotenvx-keychain#readme",
+  "bugs": {
+    "url": "https://github.com/Kei-naga/dotenvx-keychain/issues"
+  },
+  "keywords": [
+    "dotenvx",
+    "dotenv",
+    "keychain",
+    "secrets",
+    "cli"
+  ],
   "license": "MIT",
   "type": "module",
   "engines": {
