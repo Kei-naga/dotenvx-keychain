@@ -1,102 +1,95 @@
-# 📦 dotenvx-keychain 要件定義書 (PRD)
+# dotenvx-keychain Product Requirements Document (PRD)
 
-## 1. プロダクト概要 (Overview)
+## 1. Product Overview
 
-CursorやClaude CodeをはじめとするAIコーディングエージェントの普及に伴い、ローカルのファイルを自律的にスキャンする開発スタイルが一般化している。これにより、従来の平文の `.env` ファイルでは、APIキーやシークレット情報がエージェントに読み取られ、流出・上書きされるセキュリティリスクが顕在化している。
+As AI coding agents such as Cursor and Claude Code become widespread, development workflows that autonomously scan local files are becoming standard. In that environment, traditional plaintext `.env` files create clear security risks: agents can read, leak, or overwrite API keys and other secret values.
 
-`dotenvx` は環境変数を暗号化することでこの問題を解決するが、復号のための鍵（`DOTENV_PRIVATE_KEY`）を `.env.keys` としてリポジトリ内に残存させてしまうと、結局エージェントのアクセス対象となり根本的な解決に至らない。
+`dotenvx` solves part of this problem by encrypting environment variables. However, if the decryption key (`DOTENV_PRIVATE_KEY`) remains inside the repository as `.env.keys`, it is still visible to agents, so the root problem is not actually resolved.
 
-本ツール `dotenvx-keychain` は、`dotenvx` の非常に薄いNode.js製CLIラッパーとして機能し、「環境変数の暗号化は dotenvx に任せ、復号鍵の保管はOSネイティブのキーチェーンに全自動で隔離する」ことで、エージェント時代に最適化されたゼロトラストなローカル開発環境を実現する。
+`dotenvx-keychain` is a very thin Node.js CLI wrapper around `dotenvx`. It delegates environment variable encryption to `dotenvx` while automatically isolating the decryption key inside the OS-native keychain. The result is a zero-trust local development workflow that is better aligned with the agent era.
 
-あわせて、本ツールはOSSとして継続的にメンテナンス可能な形で
-npm に公開し、個人利用・チーム利用の双方で `npx` や
-パッケージ導入経由ですぐに利用開始できる配布形態を前提とする。
+The tool is also intended to be continuously maintainable as OSS and published on npm, with a distribution model that lets both individuals and teams start immediately through `npx` or a normal package install.
 
-## 2. コアバリュー (Core Values)
+## 2. Core Values
 
-- **痕跡ゼロのファイルシステム:** ワーキングツリー内に `.env.keys` などの鍵ファイルを一切残さない。エージェントから見えるのは暗号化された `.env` のみ。
-- **究極のDX（開発者体験）:** 開発者は鍵のコピペや管理を一切意識することなく、最初の一手（`init`）といつもの実行（`run`）だけで透過的にツールを利用できる。
-- **チーム開発へのシームレスな適応:** 機密情報を含まない設定ファイル（識別子のみを記載）をGitで共有することで、チームメンバー間で共通の名前空間を摩擦ゼロで共有できる。
+- **Zero-trace filesystem:** Never leave key files such as `.env.keys` in the working tree. Agents should only be able to see the encrypted `.env`.
+- **Maximum DX:** Developers should not need to think about copying, pasting, or managing keys. The tool should work transparently through an initial `init` and the usual `run` flow.
+- **Seamless team adoption:** A non-secret config file that stores only the identifier can be shared through Git so that team members can share the same namespace without friction.
 
 ---
 
-## 3. CLI仕様・機能要件 (Functional Requirements)
+## 3. CLI Specification and Functional Requirements
 
-- CLI バイナリ名は `dotenvx-keychain` を正規名とし、
-  追加で短縮実行名 `dxk` を提供する。
-- コマンド短縮形は `list`=`ls`、`remove`=`rm` とし、
-  `init` と `run` は正規名のみとする。
-- 短縮形は正規名と同じ引数契約、終了コード、出力契約を持つ。
+- The canonical CLI binary name is `dotenvx-keychain`, with an additional short alias `dxk`.
+- Command aliases are `list` = `ls` and `remove` = `rm`.
+- `init` and `run` are available only under their canonical names.
+- Aliases must preserve the same argument contract, exit codes, and output contract as the canonical commands.
 
-### ① 初期化コマンド: `init`
+### 1. Initialization Command: `init`
 
-`init` は 2 つの役割を持つ。既存の復号鍵が利用可能なプロジェクトでは、その鍵を OS のキーチェーンへ登録し、不要な `.env.keys` を即座に破棄する。まだ鍵素材が存在しない新規プロジェクトでは、隔離した一時環境で `dotenvx` を使って初回ブートストラップを行い、生成した復号鍵をキーチェーンへ保存したうえで、プロジェクト側には暗号化済み `.env` と識別子付き設定ファイルだけを残す。**成功時は識別子を記録した設定ファイルを出力する。**
+`init` has two roles. For projects where a decryption key is already available, it registers that key in the OS keychain and immediately discards any unnecessary `.env.keys`. For new projects that do not yet have key material, it performs the initial bootstrap with `dotenvx` inside an isolated temporary environment, stores the generated decryption key in the keychain, and leaves only the encrypted `.env` and an identifier-bearing config file in the project. On success, it must write a config file that records the identifier.
 
-- **パターンA: デフォルト実行（引数なし）**
+- **Pattern A: Default execution with no arguments**
 
 ```bash
 npx dotenvx-keychain init
 ```
 
-- **挙動:** カレントディレクトリのパス（またはそのハッシュ・フォルダ名）から自動で識別子を算出する。既存鍵が利用可能ならそれをキーチェーンへ保存し、利用可能な鍵がなくても新規プロジェクトであれば安全な初回ブートストラップを行う。
-- **ファイル出力:** プロジェクトルートに `.dotenvx-keychain`（内容: `{"id": "自動生成された識別子"}`）を生成する。
+- **Behavior:** Automatically derive an identifier from the current directory path, its hash, or its folder name. If an existing key can be reused, store it in the keychain. If no reusable key exists but the project is new, perform a safe first-time bootstrap.
+- **File output:** Create `.dotenvx-keychain` in the project root with content such as `{"id": "auto-generated-identifier"}`.
 
-- **パターンB: カスタム識別子の指定**
+- **Pattern B: Explicit custom identifier**
 
 ```bash
 npx dotenvx-keychain init my-app-v2
 ```
 
-- **挙動:** 指定された `my-app-v2` を識別子として、利用可能な既存鍵をキーチェーンに保存する。既存鍵がなく、かつ既存の暗号化済み `.env` や既存設定の再利用ではない場合は、安全な初回ブートストラップを行う。
-- **ファイル出力:** プロジェクトルートに `.dotenvx-keychain`（内容: `{"id": "my-app-v2"}`）を生成する。
+- **Behavior:** Use the supplied `my-app-v2` as the identifier and store any available existing key in the keychain. If no existing key is available, and the case is not reusing an existing encrypted `.env` or existing config, perform a safe first-time bootstrap.
+- **File output:** Create `.dotenvx-keychain` in the project root with content `{"id": "my-app-v2"}`.
 
-> **シナリオ別の前提**
-> `init` の鍵ソース優先順位は、既存のローカルキーチェーン、親プロセスの `DOTENV_PRIVATE_KEY`、既存の `.env.keys`、新規ブートストラップの順とする。新規プロジェクトでは、事前に `dotenvx` 側で鍵を用意していなくても `init` だけで開始できる。一方で、既に暗号化済みの `.env` を持つプロジェクトや、既存の `.dotenvx-keychain` を再利用するプロジェクトでは、自動で新鍵を生成して既存暗号化状態を上書きしてはならない。
+**Scenario assumptions**
+The key source priority for `init` is: existing local keychain value, parent process `DOTENV_PRIVATE_KEY`, existing `.env.keys`, then fresh bootstrap. A new project must be able to start from `init` alone even when `dotenvx` has not been used to prepare keys in advance. By contrast, a project that already has an encrypted `.env`, or one that is reusing an existing `.dotenvx-keychain`, must not silently generate a new key and overwrite the current encrypted state.
 
-> **💡 運用上のベストプラクティス**
-> 生成される `.dotenvx-keychain` は機密情報を含まないため、**Gitへのコミットを推奨**する。これにより、他の開発者は Clone 後に承認済みの経路で鍵を受け取ったうえで `init` を実行すれば、同じ識別子でローカルキーチェーンのセットアップを完了できる。
+**Operational best practice**
+`.dotenvx-keychain` does not contain secret material, so it should be committed to Git. That lets other developers clone the repo, obtain the key through an approved path, run `init`, and complete the local keychain setup under the same identifier.
 
-### ② 実行コマンド: `run`
+### 2. Execution Command: `run`
 
-アプリケーションの実行をラップし、自動で鍵を注入する。
+Wrap application execution and inject the key automatically.
 
 ```bash
 npx dotenvx-keychain run -- node index.js
-
 ```
 
-- **識別子の解決ロジック:**
+- **Identifier resolution logic:**
 
-1. カレントディレクトリの `.dotenvx-keychain` ファイルを読み込み、記載された `id` を取得する（Single Source of Truth）。
-2. ※ファイルが存在しない場合（手動削除時など）は、フォールバックとしてパスからの自動計算に切り替える。
+1. Read the `.dotenvx-keychain` file in the current directory and obtain the stored `id`. This file is the single source of truth.
+2. If the file does not exist, for example after manual deletion, fall back to auto-deriving the identifier from the path.
 
-- **メモリ注入と実行:** 取得した `id` に紐づく鍵をキーチェーンから取得し、環境変数 `DOTENV_PRIVATE_KEY` としてメモリ上にセット。子プロセスとして `dotenvx run -- <command>` を実行する。
+- **In-memory injection and execution:** Fetch the key associated with the resolved `id` from the keychain, place it into memory as environment variable `DOTENV_PRIVATE_KEY`, and execute `dotenvx run -- <command>` as a child process.
 
-### ③ 管理用コマンド: `list` / `remove`
+### 3. Administrative Commands: `list` / `remove`
 
-- **`list`:** ローカルマシンに保存されている本ツール用の識別子（ID）一覧を表示する。（※実際の鍵の文字列はセキュリティ上、絶対に表示しない）
-- **`remove <id>`:** 不要になったプロジェクトの鍵をキーチェーンから安全に削除する。
-
----
-
-## 4. 非機能要件 (Non-Functional Requirements)
-
-- **配布・公開形態:** OSSとして npm に公開する。利用者は
-  `npx dotenvx-keychain ...` または npm 経由の導入でCLIを利用でき、
-  公開パッケージにはローカル開発用途で必要な実行バイナリと
-  基本ドキュメントを含める。
-
-| 項目                       | 要件詳細                                                                                                                                                                                                        |
-| -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **クロスプラットフォーム** | macOS (Keychain Access), Windows (Credential Manager), Linux (Secret Service API / libsecret) にネイティブ対応すること。                                                                                        |
-| **セキュリティ境界**       | ・鍵文字列は標準出力/標準エラー出力に一切露出させない。 <br>・環境変数の注入は `run` で起動した **該当子プロセスのみ** に限定し、親プロセス（現在のシェル）を汚染しない。                                       |
-| **パフォーマンス**         | Node.js製の極めて薄いラッパーとして、キーチェーンからの鍵取得〜プロセス起動のオーバーヘッドをミリ秒単位に抑える。                                                                                               |
-| **CI/CD環境との切り分け**  | 本ツールは **ローカル開発環境専用** とする。GitHub Actions等のCI/CD環境や本番環境では、本ツールは介在せず、プラットフォーム標準のシークレット管理から直接 `DOTENV_PRIVATE_KEY` を注入する既存フローを維持する。 |
+- **`list`:** Show the list of identifiers stored locally for this tool. Never display the actual key string.
+- **`remove <id>`:** Safely delete the key for an obsolete project from the keychain.
 
 ---
 
-## 5. 既存アプローチとの差別化点（Competitive Advantage）
+## 4. Non-functional Requirements
 
-1. **`envchain` 等との比較:** 環境変数すべてを隠すのではなく、**「復号鍵1つだけ」を隔離する**設計。これにより、「ファイルで環境変数を一覧・管理・共有する」という `dotenv` 本来の優れたDXを維持できる。
-2. **手動スクリプトとの比較:** OSごとの分岐や `.env.keys` のキーチェーン登録・削除ロジックを自作する必要がなく、`dotenvx` と組み合わせた導入手順を薄く標準化できる。
-3. **チーム開発への適応:** `.dotenvx-keychain` ファイルによる名前空間の共有により、各開発者が手動でキーチェーンの登録名を合わせる手間を排除し、チーム全体でのセキュアな開発環境の標準化を容易にする。
+- **Distribution and publication model:** Publish as OSS on npm. Users must be able to run the CLI through `npx dotenvx-keychain ...` or a normal npm install, and the published package must include the runtime binaries and core documentation needed for local development.
+
+| Item | Requirement details |
+| --- | --- |
+| **Cross-platform** | Must support macOS (Keychain Access), Windows (Credential Manager), and Linux (Secret Service API / libsecret) through native OS integrations. |
+| **Security boundary** | Never expose the key string to stdout or stderr. Restrict environment variable injection to only the child process started by `run`, and do not contaminate the parent process or current shell. |
+| **Performance** | As an extremely thin Node.js wrapper, keep the overhead from keychain lookup through process launch in the millisecond range. |
+| **Separation from CI/CD** | The tool is for local development only. In CI/CD systems such as GitHub Actions and in production, the tool should not intervene; existing flows should continue to inject `DOTENV_PRIVATE_KEY` directly from the platform-standard secret manager. |
+
+---
+
+## 5. Competitive Advantage Compared with Existing Approaches
+
+1. **Compared with `envchain` and similar tools:** Instead of hiding all environment variables, this design isolates only the single decryption key. That preserves the core `dotenv` developer experience of listing, managing, and sharing environment variables through files.
+2. **Compared with manual scripts:** Teams do not need to hand-roll OS-specific branching or their own `.env.keys` registration and deletion logic. The setup flow around `dotenvx` stays thin and standardized.
+3. **For team development:** Sharing the namespace through `.dotenvx-keychain` removes the need for each developer to manually coordinate keychain entry names and makes it easier to standardize a secure development setup across the team.

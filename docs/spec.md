@@ -1,113 +1,83 @@
-# dotenvx-keychain 仕様書
+# dotenvx-keychain Specification
 
-## 1. 文書の位置づけ
+## 1. Role of This Document
 
-- この文書は [PRD](./prd.md) を実装可能な粒度に展開する。
-- 対象バージョンは v1 の CLI とする。
-- Git / GitHub の開発運用は [contributing.md](./contributing.md) を参照する。
-- PRD と本書に矛盾がある場合は、差分を論点として扱い、
-  PRD 側の更新要否を確認する。
+- This document expands the [PRD](./prd.md) to an implementable level of detail.
+- The target version is the v1 CLI.
+- For Git / GitHub development workflow, see [contributing.md](./contributing.md).
+- If the PRD and this document conflict, treat the difference as an issue to resolve and confirm whether the PRD should also be updated.
 
-## 2. スコープ
+## 2. Scope
 
-本書が定義する対象は次のとおり。
+This document defines the following scope.
 
-- ローカル開発環境向け CLI の `init`、`run`、`list`、`remove`
-- `.dotenvx-keychain` 設定ファイルの形式と解決規則
-- OS ネイティブのシークレットストアへの保存ルール
-- `dotenvx` 実行時に必要な鍵注入の振る舞い
-- 事前注入された `DOTENV_PRIVATE_KEY` を優先する実行モード
+- The `init`, `run`, `list`, and `remove` commands of a CLI for local development environments
+- The format and resolution rules for the `.dotenvx-keychain` config file
+- The persistence rules for storing values in the OS-native secret store
+- The behavior for injecting the key required when executing `dotenvx`
+- An execution mode that prioritizes a pre-injected `DOTENV_PRIVATE_KEY`
 
-本書の対象外は次のとおり。
+The following are out of scope.
 
-- CI/CD や本番環境でのシークレット配布、保管、
-  ローテーションの仕組みそのもの
-- `dotenvx` 自体の暗号化アルゴリズムやファイル形式
-- `DOTENV_PRIVATE_KEY` 以外の複数鍵形式
-- JSON 出力や静音モードなどの自動化向け出力制御
-- 鍵のエクスポート、インポート、バックアップ、同期、共有、復旧
-- リモート KMS やクラウドシークレットマネージャ連携
+- The secret distribution, storage, or rotation mechanisms themselves for CI/CD or production environments
+- The encryption algorithm or file format of `dotenvx` itself
+- Multiple key formats other than `DOTENV_PRIVATE_KEY`
+- Automation-oriented output controls such as JSON output or quiet mode
+- Key export, import, backup, sync, sharing, or recovery
+- Integration with a remote KMS or cloud secret manager
 
-## 3. 前提と決定事項
+## 3. Assumptions and Decisions
 
-- 1 プロジェクトに対して有効な識別子は 1 つとする。
-- 1 つの識別子は 1 つの `DOTENV_PRIVATE_KEY` 値に対応する。
-- `.dotenvx-keychain` は機密情報を含まないため、
-  Git 管理対象に含めてよい。
-- `init` を引数なしで実行した場合、同じディレクトリに
-  `.dotenvx-keychain` が既にあれば、その `id` を再利用する。
-- `run` はプロジェクトルート直下だけでなく、
-  その子ディレクトリからの実行も許可する。
-- `run` 実行時に設定ファイルが見つからない場合だけ、
-  カレントディレクトリ由来の自動 ID をフォールバックとして使う。
-- `run` 実行時に親プロセスの環境変数
-  `DOTENV_PRIVATE_KEY` が非空で設定されている場合は、
-  その値を最優先し、OS ストア参照を行わない。
-- 別端末で既存プロジェクトを初期化する場合、
-  v1 は共有鍵の配布そのものを自動化しない。
-  必要な鍵は既存の OS ストアまたは親プロセスの
-  `DOTENV_PRIVATE_KEY` から供給されていることを前提とする。
-- `init` が既存設定ファイルの `id` を再利用する場合、
-  ローカルに鍵が存在しなければ新鍵を自動生成せず、
-  既存鍵の供給を求めて失敗する。
-- `init` が取り込める鍵ソースは、解決した ID に対応する
-  既存の OS ストア値、親プロセスの `DOTENV_PRIVATE_KEY`、
-  bundled `dotenvx` で読み取れる既存ローカル鍵、
-  または新規プロジェクト向けの隔離ブートストラップとする。
-- 既存設定ファイルも暗号化済み `.env` も存在しない新規プロジェクトでは、
-  既存鍵が見つからない場合に限り、`init` が bundled `dotenvx` を使って
-  最初の `DOTENV_PRIVATE_KEY` と暗号化済み `.env` を生成してよい。
-- `dotenvx` は本ツールの同梱依存として扱い、
-  グローバルインストールを前提にしない。
-- 配布形態は公開 npm パッケージとし、
-  `npx dotenvx-keychain` またはローカル導入した
-  `dotenvx-keychain` / `dxk` から利用できることを前提にする。
-- 公開パッケージには CLI 実行に必要な
-  `dotenvx` ランタイム依存、README、LICENSE を含める。
-- 対応 OS は `darwin`、`win32`、`linux` に限定し、
-  それ以外は未対応プラットフォームとして失敗させる。
-- v1 が保存・注入の対象とする鍵形式は
-  `DOTENV_PRIVATE_KEY` のみとする。
-- v1 の CLI 出力は人間向けプレーンテキストのみとし、
-  JSON 出力や静音モードは提供しない。
-- 鍵のインポート、エクスポート、バックアップは
-  将来機能とし、v1 では提供しない。
-- OS ネイティブストアが利用できない場合でも、
-  平文ファイルや代替ストアへフォールバックしない。
+- Each project has exactly one active identifier.
+- Each identifier maps to exactly one `DOTENV_PRIVATE_KEY` value.
+- `.dotenvx-keychain` does not contain secret material, so it may be committed to Git.
+- If `init` is run with no arguments and `.dotenvx-keychain` already exists in the same directory, it reuses that `id`.
+- `run` is allowed not only from the project root, but also from child directories under it.
+- `run` uses an auto-derived ID from the current directory only when no config file can be found.
+- If the parent process environment variable `DOTENV_PRIVATE_KEY` is set to a non-empty value when `run` executes, that value takes top priority and the OS store must not be consulted.
+- When initializing an existing project on a different terminal or machine, v1 does not automate shared-key distribution itself. The required key is assumed to be supplied through the existing OS store or the parent process `DOTENV_PRIVATE_KEY`.
+- If `init` reuses the `id` from an existing config file and no local key is available, it must not generate a new key automatically and must instead fail, requiring the existing key to be supplied.
+- The key sources that `init` may consume are: an existing OS store value for the resolved ID, the parent process `DOTENV_PRIVATE_KEY`, an existing local key that the bundled `dotenvx` can read, or an isolated bootstrap flow for a new project.
+- For a new project with neither an existing config file nor an encrypted `.env`, `init` may generate the first `DOTENV_PRIVATE_KEY` and encrypted `.env` through the bundled `dotenvx`, but only when no reusable key can be found.
+- `dotenvx` is treated as a bundled runtime dependency of this tool and must not require a global installation.
+- The distribution target is a public npm package that can be used through `npx dotenvx-keychain` or a locally installed `dotenvx-keychain` / `dxk` binary.
+- The published package must include the `dotenvx` runtime dependency required for CLI execution, plus README and LICENSE.
+- Supported operating systems are limited to `darwin`, `win32`, and `linux`; all others must fail as unsupported platforms.
+- In v1, the only key format that can be stored and injected is `DOTENV_PRIVATE_KEY`.
+- In v1, CLI output is plain text for humans only; JSON output and quiet mode are not provided.
+- Key import, export, and backup are future capabilities and are not provided in v1.
+- If the OS-native store is unavailable, the tool must not fall back to a plaintext file or alternate store.
 
-## 4. 用語
+## 4. Terminology
 
-- プロジェクトルート:
-  `.dotenvx-keychain` を配置するディレクトリ。
+- Project root:
+  The directory that contains `.dotenvx-keychain`.
 - ID:
-  キーチェーン内の鍵エントリを一意に識別する文字列。
-- 設定ファイル:
-  プロジェクトルートに置く `.dotenvx-keychain` JSON ファイル。
-- シークレットエントリ:
-  OS ネイティブのストアに保存される、
-  `DOTENV_PRIVATE_KEY` の実値。
-- 事前注入鍵:
-  親プロセスの環境変数 `DOTENV_PRIVATE_KEY` に
-  すでに設定されている値。
+  The string that uniquely identifies a key entry inside the keychain.
+- Config file:
+  The `.dotenvx-keychain` JSON file placed in the project root.
+- Secret entry:
+  The actual `DOTENV_PRIVATE_KEY` value stored in the OS-native store.
+- Pre-injected key:
+  A value that is already set in the parent process environment variable `DOTENV_PRIVATE_KEY`.
 
-## 5. 管理対象と永続化ルール
+## 5. Managed Artifacts and Persistence Rules
 
-### 5.1 ファイルとストア
+### 5.1 Files and Store
 
 - `.env`:
-  `dotenvx` が暗号化済みであることを前提に、そのまま残す。
+  Assume `dotenvx` keeps it encrypted and leave it in place.
 - `.env.keys`:
-  `dotenvx` 側の事前操作で生成されている可能性がある。
-  `init` は既存鍵ソースとして読み取ってよいが、
-  成功時には必ず存在してはならない。
+  It may already exist because of prior `dotenvx` operations.
+  `init` may read it as an existing key source, but it must not remain after success.
 - `.dotenvx-keychain`:
-  機密情報を含まない設定ファイルとしてプロジェクトルートに置く。
-- OS シークレットストア:
-  `DOTENV_PRIVATE_KEY` の実値を保存する唯一の永続化先とする。
+  Place it in the project root as a config file that does not contain secret material.
+- OS secret store:
+  This is the only persistent location for the actual `DOTENV_PRIVATE_KEY` value.
 
-### 5.2 `.dotenvx-keychain` の形式
+### 5.2 `.dotenvx-keychain` Format
 
-ファイル内容は UTF-8 の JSON とし、必須フィールドは `id` のみとする。
+The file content is UTF-8 JSON, and the only required field is `id`.
 
 ```json
 {
@@ -115,212 +85,149 @@
 }
 ```
 
-- `id` は必須の文字列。
-- 未知の追加プロパティは読み取り時に無視してよい。
-- 鍵文字列やトークンなど、機密値を含めてはならない。
+- `id` is a required string.
+- Unknown additional properties may be ignored when reading.
+- The file must not contain secret values such as keys or tokens.
 
-### 5.3 ストア上の論理モデル
+### 5.3 Logical Model in the Store
 
-- 名前空間は `dotenvx-keychain` で固定する。
-- ルックアップキーは `id` とする。
-- 保存値は `DOTENV_PRIVATE_KEY` の生文字列とする。
-- OS ごとの API 差分は実装で吸収し、
-  この論理モデルをユーザーに対する契約とする。
+- The namespace is fixed as `dotenvx-keychain`.
+- The lookup key is `id`.
+- The stored value is the raw `DOTENV_PRIVATE_KEY` string.
+- Per-OS API differences are absorbed by the implementation, and this logical model is the user-facing contract.
 
-### 5.4 プラットフォーム別ストアマッピング
+### 5.4 Platform-specific Store Mapping
 
-- すべてのプラットフォームで、保存先は現在のログインユーザーに
-  ひもづくストアに限定する。
-- macOS ではログインキーチェーン上の generic password として保存し、
-  `service` は `dotenvx-keychain`、`account` は `id` とする。
-- Windows では Credential Manager の Generic Credential として保存し、
-  `TargetName` は `dotenvx-keychain/<id>` とする。
-- native Linux では Secret Service API の既定コレクションに保存し、
-  少なくとも `service=dotenvx-keychain` と `id=<id>` の属性で
-  再検索できるようにする。
-- WSL では現在の Windows ログインユーザーの Credential Manager を使い、
-  `TargetName` は Windows と同じく `dotenvx-keychain/<id>` とする。
-- `list` と `remove` を実装するため、すべてのバックエンドは
-  名前空間単位の列挙と ID 完全一致の削除を提供しなければならない。
-- native Linux で Secret Service 互換のデーモンまたは既定コレクションが
-  利用できない場合は、未初期化の環境として扱わず、
-  バックエンド利用不可エラーとして終了する。
-- WSL で Windows Credential Manager 連携が利用できない場合も、
-  代替ストアへフォールバックせず、バックエンド利用不可エラーとして終了する。
+- On every platform, storage is limited to the store associated with the current logged-in user.
+- On macOS, store the value as a generic password in the login keychain with `service=dotenvx-keychain` and `account=id`.
+- On Windows, store the value as a Generic Credential in Credential Manager with `TargetName=dotenvx-keychain/<id>`.
+- On native Linux, store the value in the default Secret Service collection and make it discoverable again through at least the attributes `service=dotenvx-keychain` and `id=<id>`.
+- On WSL, use Credential Manager for the current Windows logged-in user, with `TargetName=dotenvx-keychain/<id>` just as on Windows.
+- To implement `list` and `remove`, every backend must support namespace-level enumeration and exact-match deletion by ID.
+- If a Secret Service-compatible daemon or default collection is unavailable on native Linux, the tool must end with a backend-unavailable error rather than treating the environment as simply uninitialized.
+- If Windows Credential Manager integration is unavailable on WSL, the tool must also end with a backend-unavailable error and must not fall back to an alternate store.
 
-## 6. ID 仕様
+## 6. ID Specification
 
-### 6.1 明示 ID
+### 6.1 Explicit IDs
 
-ユーザーが `init <id>` で渡す ID は次の条件を満たす必要がある。
+An ID provided by the user through `init <id>` must satisfy the following conditions.
 
-- 1 文字以上 128 文字以下
-- 使用可能文字は `a-z`、`A-Z`、`0-9`、`.`、`_`、`-`
-- 先頭末尾を含め空白不可
-- `/` と `\` を含めない
+- Between 1 and 128 characters inclusive
+- Allowed characters are `a-z`, `A-Z`, `0-9`, `.`, `_`, and `-`
+- No whitespace, including at the beginning or end
+- Must not contain `/` or `\\`
 
-条件を満たさない場合は入力エラーとして終了する。
+If the input does not satisfy these conditions, the command must end with an input error.
 
-### 6.2 自動生成 ID
+### 6.2 Auto-generated IDs
 
-`init` が引数なしで実行され、かつ同ディレクトリに
-`.dotenvx-keychain` が存在しない場合は、
-現在のディレクトリパスから自動 ID を生成する。
+If `init` runs with no arguments and `.dotenvx-keychain` does not exist in the same directory, an auto-generated ID is created from the current directory path.
 
-生成手順は次のとおり。
+The generation steps are as follows.
 
-1. 対象ディレクトリの絶対実パスを取得する。
-2. Windows ではドライブレターを小文字化する。
-3. パス区切りは `/` に正規化する。
-4. ディレクトリ名の末尾要素を `basename` として取り出す。
-5. 正規化後パスの SHA-256 を計算し、先頭 12 文字を取る。
-6. `basename-hash12` を自動 ID とする。
+1. Obtain the absolute real path of the target directory.
+2. On Windows, lowercase the drive letter.
+3. Normalize path separators to `/`.
+4. Extract the trailing directory name as `basename`.
+5. Compute the SHA-256 of the normalized path and take the first 12 characters.
+6. Use `basename-hash12` as the auto-generated ID.
 
-例として `my-app` ディレクトリなら、
-`my-app-1a2b3c4d5e6f` のような形式になる。
+For example, a directory named `my-app` would produce a format such as `my-app-1a2b3c4d5e6f`.
 
-## 7. 共通動作
+## 7. Common Behavior
 
-### 7.1 `run` 時のプロジェクトルート解決
+### 7.1 Project Root Resolution During `run`
 
-`run` は現在の作業ディレクトリから親方向へ探索し、
-最初に見つかった `.dotenvx-keychain` を採用する。
+`run` searches upward from the current working directory and adopts the first `.dotenvx-keychain` it finds.
 
-- 見つかった場合:
-  そのファイルを持つディレクトリをプロジェクトルートとする。
-- 見つからない場合:
-  現在の作業ディレクトリをプロジェクトルートとみなす。
+- If found:
+  The directory containing that file becomes the project root.
+- If not found:
+  Treat the current working directory as the project root.
 
-複数階層に設定ファイルが存在する場合は、
-最も近いものを優先する。
+If config files exist at multiple ancestor levels, the nearest one takes priority.
 
-### 7.2 子プロセス実行の原則
+### 7.2 Principles of Child Process Execution
 
-- 親プロセスの環境変数は変更しない。
-- `DOTENV_PRIVATE_KEY` は子プロセスの環境にのみ注入する。
-- 子プロセスは可能な限りシェルを介さず直接起動する。
-- ただし Windows でユーザー指定コマンドが `.cmd` または `.bat` に
-  解決される場合は、そのコマンドに限りシェル経由の起動を許可する。
-- 受け取った終了コードとシグナルは親 CLI がそのまま伝播する。
+- Do not modify the parent process environment.
+- Inject `DOTENV_PRIVATE_KEY` only into the child process environment.
+- Start the child process directly without a shell whenever possible.
+- However, on Windows, if the user-specified command resolves to a `.cmd` or `.bat`, shell-based startup is allowed only for that command.
+- The parent CLI must propagate the child process exit code and signal unchanged.
 
-### 7.3 `dotenvx` 依存解決
+### 7.3 Resolving the `dotenvx` Dependency
 
-- CLI は同梱した `dotenvx` を優先して使用する。
-- ユーザーに `dotenvx` のグローバルインストールを要求しない。
-- `dotenvx` が同梱状態で利用できない場合は、
-  依存関係エラーとして終了する。
+- The CLI must prefer the bundled `dotenvx`.
+- Users must not be required to install `dotenvx` globally.
+- If the bundled `dotenvx` is unavailable, the command must end with a dependency error.
 
-### 7.4 プラットフォーム判定とバックエンド抽象
+### 7.4 Platform Detection and Backend Abstraction
 
-- 実装は `process.platform` に基づいてバックエンドを選択する。
-- `process.platform === "linux"` の場合は、実装詳細として
-  native Linux と WSL を追加判定してよい。
-- シークレットストア連携は `set`、`get`、`list`、`remove` の
-  4 操作を持つ共通抽象で包む。
-- CLI 本体は OS 固有 API を直接分岐せず、
-  すべてこの抽象を経由して操作する。
-- 未対応プラットフォームでは `init`、`run`、`list`、`remove` の
-  すべてを非 0 で失敗させる。
-- ネイティブストア初期化に失敗した場合は、
-  平文ファイル、別環境変数、メモリキャッシュへのフォールバックを行わない。
+- The implementation selects the backend based on `process.platform`.
+- When `process.platform === "linux"`, the implementation may further distinguish native Linux from WSL.
+- Secret store integration is wrapped in a common abstraction with four operations: `set`, `get`, `list`, and `remove`.
+- The CLI itself must not branch directly on OS-specific APIs and must access everything through that abstraction.
+- On unsupported platforms, all of `init`, `run`, `list`, and `remove` must fail with a non-zero exit status.
+- If native store initialization fails, the tool must not fall back to a plaintext file, a different environment variable, or an in-memory cache.
 
-### 7.5 Linux / WSL バックエンドの前提条件
+### 7.5 Prerequisites for Linux / WSL Backends
 
-- native Linux の対応条件は Secret Service API 互換実装と、
-  書き込み可能な既定コレクションが利用可能であることとする。
-- 代表例として GNOME Keyring などを想定するが、
-  実装は製品名ではなく Secret Service 互換性で判断する。
-- D-Bus セッション不在、既定コレクション未作成、
-  コレクションのアンロック不能などで利用できない場合は、
-  解決手順を含むエラーメッセージを返して終了する。
-- WSL の対応条件は Linux 側から `powershell.exe` を起動でき、
-  現在の Windows ログインユーザーの Credential Manager へ到達できることとする。
-- WSL でその条件を満たさない場合も、平文ファイルや Linux Secret Service への
-  自動フォールバックは行わず、解決手順を含むエラーメッセージを返して終了する。
+- Native Linux support requires a Secret Service API-compatible implementation and an available writable default collection.
+- GNOME Keyring is a representative example, but the implementation judges compatibility by Secret Service behavior rather than by product name.
+- If the backend is unavailable because the D-Bus session is missing, the default collection has not been created, the collection cannot be unlocked, or similar conditions apply, the tool must exit with an error message that includes remediation guidance.
+- WSL support requires that `powershell.exe` can be launched from the Linux side and that the current Windows logged-in user's Credential Manager is reachable.
+- If WSL does not satisfy those conditions, the tool must also exit with an error message that includes remediation guidance and must not automatically fall back to a plaintext file or Linux Secret Service.
 
-### 7.6 推奨実装方針
+### 7.6 Recommended Implementation Approach
 
-- クロスプラットフォームのシークレットストア連携は、
-  macOS、Windows、Linux を単一 API で扱える成熟した OSS を
-  利用してよい。
-- ただし CLI の公開契約は OSS の API に直接依存させず、
-  [7.4](#74-プラットフォーム判定とバックエンド抽象) の共通抽象の内側に
-  閉じ込める。
-- 子プロセス起動や ID 解決などの CLI 固有ロジックは
-  OSS へ委譲せず、本ツール側で制御する。
-- Linux の利用可否判定、未対応 OS の扱い、
-  平文への非フォールバック方針は OSS 採用時も維持する。
+- For cross-platform secret-store integration, the implementation may use a mature OSS library that exposes a single API across macOS, Windows, and Linux.
+- However, the public CLI contract must not depend directly on that OSS API; it must be confined within the common abstraction described in [7.4](#74-platform-detection-and-backend-abstraction).
+- CLI-specific logic such as child-process launching and ID resolution must not be delegated to OSS and must remain controlled by this tool.
+- The Linux availability checks, unsupported-OS handling, and no-plaintext-fallback policy must be preserved even when OSS dependencies are adopted.
 
-### 7.7 コマンド名と短縮形
+### 7.7 Command Names and Aliases
 
-- CLI 実行名は `dotenvx-keychain` を正規名、`dxk` を短縮実行名として受け付ける。
-- `list` は `ls`、`remove` は `rm` を短縮形として受け付ける。
-- `init` と `run` は短縮形を持たない。
-- 正規名と短縮形は組み合わせて使える。
-  たとえば `dxk init`、`dotenvx-keychain ls`、`dxk rm` は有効とする。
-- 短縮形は正規名と完全に同義であり、
-  引数解釈、メッセージ、終了コード、セキュリティ要件を変えない。
+- The CLI accepts `dotenvx-keychain` as the canonical executable name and `dxk` as the short executable name.
+- `list` accepts `ls` as an alias, and `remove` accepts `rm` as an alias.
+- `init` and `run` have no aliases.
+- Canonical names and aliases can be mixed. For example, `dxk init`, `dotenvx-keychain ls`, and `dxk rm` are all valid.
+- Aliases are fully synonymous with their canonical names and must not change argument parsing, messages, exit codes, or security requirements.
 
-### 7.8 npm 配布契約
+### 7.8 npm Distribution Contract
 
-- 公開先は公開 npm レジストリを前提とする。
-- `npx dotenvx-keychain <command>` で
-  そのまま CLI を実行できなければならない。
-- パッケージをローカル導入した場合は
-  `dotenvx-keychain` と `dxk` の両実行名を提供する。
-- 実行時にグローバル `dotenvx` や追加セットアップを要求しない。
-- 公開 tarball には CLI 実行に必要な成果物、README、LICENSE を含める。
+- The publication target is the public npm registry.
+- `npx dotenvx-keychain <command>` must run the CLI directly.
+- When the package is installed locally, it must provide both `dotenvx-keychain` and `dxk`.
+- Runtime execution must not require a global `dotenvx` or extra setup.
+- The published tarball must include the artifacts required for CLI execution, plus README and LICENSE.
 
-### 7.9 鍵ソースの優先順位と運用境界
+### 7.9 Key Source Priority and Operational Boundaries
 
-- `run` の鍵ソース優先順位は、
-  事前注入鍵、OS ストア、エラーの順とする。
-- `run` で事前注入鍵がある場合は、
-  [7.1](#71-run-時のプロジェクトルート解決) の探索と
-  OS ストア参照を省略し、その値を子プロセスへそのまま渡す。
-- `init` の鍵ソース優先順位は、
-  OS ストア既存値、事前注入鍵、
-  既存のローカル `.env.keys`、新規ブートストラップ、
-  エラーの順とする。
-- ただし `init` の ID が既存設定ファイルの再利用で決まった場合は、
-  OS ストア、事前注入鍵、ローカル `.env.keys` の
-  いずれにも値がなければ、既存鍵不足として失敗する。
-- 既存設定ファイルがなく、再利用可能な鍵も存在しない場合に限り、
-  `init` は隔離した一時ディレクトリで bundled `dotenvx` を実行し、
-  新しい `DOTENV_PRIVATE_KEY` と暗号化済み `.env` を生成してよい。
-- 既に暗号化済みの `.env` が存在するプロジェクトでは、
-  `init` は新鍵を自動生成して既存暗号化状態を置き換えてはならない。
-- v1 はチーム向けの鍵配布機構を持たない。
-  別端末で既存プロジェクトを初期化する場合は、
-  承認済みの別経路で既存鍵を受け取り、
-  事前注入鍵またはローカルストアとして利用可能にしておく。
-- CI/CD や本番環境では、
-  プラットフォーム標準のシークレット管理から
-  `DOTENV_PRIVATE_KEY` を直接注入することを前提とする。
-  本ツールはその配布、保管、同期を担わない。
+- The key source priority for `run` is: pre-injected key, OS store, then error.
+- If a pre-injected key is present for `run`, skip the project-root search from [7.1](#71-project-root-resolution-during-run) and the OS store lookup, and pass that value directly to the child process.
+- The key source priority for `init` is: existing OS store value, pre-injected key, existing local `.env.keys`, fresh bootstrap, then error.
+- However, if the `init` ID was determined by reusing an existing config file, and none of the OS store, pre-injected key, or local `.env.keys` contains a value, the command must fail as a missing-existing-key case.
+- Only when there is no existing config file and no reusable key may `init` execute the bundled `dotenvx` in an isolated temporary directory to generate a new `DOTENV_PRIVATE_KEY` and encrypted `.env`.
+- If an encrypted `.env` already exists in the project, `init` must not generate a new key automatically and replace the existing encrypted state.
+- v1 has no team-oriented key distribution mechanism.
+- In CI/CD or production environments, `DOTENV_PRIVATE_KEY` is expected to be injected directly through the platform-standard secret-management mechanism. This tool does not handle distribution, storage, or sync there.
 
-### 7.10 性能目標
+### 7.10 Performance Target
 
-- v1 の性能評価は `run` のラッパー追加オーバーヘッドを対象とする。
-- 追加オーバーヘッドは、同一マシンで同一コマンドを
-  `dotenvx run -- <command>` で直接起動した場合と
-  `dotenvx-keychain run -- <command>` で起動した場合の
-  起動完了までの wall-clock 差分で測る。
-- 測定条件は、`dotenvx` の依存解決が完了しており、
-  `npx` 初回ダウンロードやモジュールインストールを含めないこととする。
-- 鍵ソースは事前注入鍵または既存の OS ストアエントリとし、
-  `init` による鍵生成は含めない。
-- 子コマンドは `node -e "0"` 相当の短時間プロセスとする。
-- 受け入れ目標は、20 回連続実行時の追加オーバーヘッドについて、
-  中央値 200 ms 以下、p95 500 ms 以下とする。
-- OS のキーチェーンアンロック UI、初回キャッシュ生成、
-  ネットワーク起因の遅延は評価対象外とする。
+- In v1, performance evaluation targets only the additional wrapper overhead introduced by `run`.
+- Measure additional overhead as the wall-clock difference between running the same command directly with `dotenvx run -- <command>` and running it through `dotenvx-keychain run -- <command>` on the same machine, up to startup completion.
+- The measurement conditions assume that `dotenvx` dependency resolution has already completed and exclude first-time `npx` downloads and module installation.
+- The key source is either a pre-injected key or an existing OS store entry; key generation through `init` is excluded.
+- The child command is a short-lived process equivalent to `node -e "0"`.
+- The acceptance target is additional overhead across 20 consecutive runs of median 200 ms or less and p95 500 ms or less.
+- Keychain unlock UI, first-time cache generation, and network-caused delays are outside the evaluation scope.
 
-## 8. コマンド仕様
+## 8. Command Specifications
 
 ### 8.1 `init`
 
-#### 8.1.1 呼び出し形式
+#### 8.1.1 Invocation
 
 ```bash
 dotenvx-keychain init
@@ -330,241 +237,165 @@ dotenvx-keychain init <id>
 dxk init <id>
 ```
 
-#### 8.1.2 入力解決
+#### 8.1.2 Input Resolution
 
-`init` の対象ディレクトリは、実行時のカレントディレクトリとする。
+The target directory of `init` is the current working directory at execution time.
 
-ID の解決順序は次のとおり。
+The ID resolution order is as follows.
 
-1. 明示引数 `<id>` があればそれを使う。
-2. 明示引数がなく、同ディレクトリに
-   `.dotenvx-keychain` があれば、その `id` を使う。
-3. どちらもなければ、現在ディレクトリから自動生成する。
+1. If an explicit `<id>` argument is provided, use it.
+2. If there is no explicit argument and `.dotenvx-keychain` exists in the same directory, use its `id`.
+3. Otherwise, auto-generate the ID from the current directory.
 
-以後の鍵解決では、採用した ID の由来が
-明示引数、既存設定再利用、自動生成のいずれかを区別する。
+During later key resolution, the implementation must distinguish whether the adopted ID came from an explicit argument, existing-config reuse, or auto-generation.
 
-#### 8.1.3 正常系フロー
+#### 8.1.3 Happy-path Flow
 
-1. 使用する ID と、その由来が明示引数、
-  既存設定再利用、自動生成のいずれかを決定する。
-2. 同じ ID の鍵が OS ストアに既にあれば、それを再利用する。
-3. 2 に該当せず、親プロセスの `DOTENV_PRIVATE_KEY` が
-  非空なら、その値を OS ストアへ保存する。
-4. 2 と 3 に該当せず、プロジェクトルートに既存の `.env.keys` があれば、
-  そこから `DOTENV_PRIVATE_KEY` を取得して OS ストアへ保存する。
-5. 2 から 4 に該当せず、ID の由来が既存設定再利用なら、
-  既存鍵不足エラーとして失敗する。
-6. 2 から 5 に該当せず、かつ既に暗号化済みの `.env` が存在する場合は、
-  既存暗号化状態に対応する鍵不足エラーとして失敗する。
-7. 2 から 6 に該当しない場合は、隔離した一時ディレクトリで
-  bundled `dotenvx` を実行して新しい `DOTENV_PRIVATE_KEY` と
-  暗号化済み `.env` を生成し、その鍵を OS ストアへ保存したうえで
-  生成結果の `.env` をプロジェクトルートへ反映する。
-8. `.dotenvx-keychain` を `{ "id": "..." }` 形式で書き込む。
-9. `.env.keys` が存在する場合は削除する。
-10. 成功メッセージとして ID と設定ファイルの配置先を表示する。
+1. Determine the ID to use and whether its source is an explicit argument, existing-config reuse, or auto-generation.
+2. If the OS store already contains a key for that ID, reuse it.
+3. If step 2 does not apply and the parent process `DOTENV_PRIVATE_KEY` is non-empty, store that value in the OS store.
+4. If steps 2 and 3 do not apply and an existing `.env.keys` is present in the project root, obtain `DOTENV_PRIVATE_KEY` from it and store it in the OS store.
+5. If steps 2 through 4 do not apply and the ID source is existing-config reuse, fail with a missing-existing-key error.
+6. If steps 2 through 5 do not apply and an encrypted `.env` already exists, fail with a missing key for the existing encrypted state.
+7. If steps 2 through 6 do not apply, run the bundled `dotenvx` in an isolated temporary directory to generate a new `DOTENV_PRIVATE_KEY` and encrypted `.env`, store that key in the OS store, and then reflect the generated `.env` into the project root.
+8. Write `.dotenvx-keychain` in the form `{ "id": "..." }`.
+9. Delete `.env.keys` if it exists.
+10. Display a success message that includes the ID and the config-file location.
 
-#### 8.1.4 上書きルール
+#### 8.1.4 Overwrite Rules
 
-- 同じ ID のエントリが既に存在する場合は上書きを許可する。
-- 明示引数で別 ID を指定した場合、
-  `.dotenvx-keychain` は新しい ID で更新する。
-- 旧 ID のキーチェーンエントリは自動削除しない。
+- If an entry for the same ID already exists, overwriting is allowed.
+- If a different ID is given explicitly, `.dotenvx-keychain` is updated to the new ID.
+- The keychain entry for the old ID is not removed automatically.
 
-#### 8.1.5 失敗時ルール
+#### 8.1.5 Failure Rules
 
-- 既存設定ファイルの再利用時に、
-  OS ストア、親プロセス環境、ローカル `.env.keys` の
-  いずれにも鍵がない場合は、
-  既存鍵不足エラーとして終了し、
-  承認済みの別経路で鍵を取得して再実行するよう促す。
-- 新規セットアップ時に利用可能な鍵が存在しない場合は、
-  新規ブートストラップを試みる。
-- 新規ブートストラップ時は、親プロセス環境由来の無関係な変数を
-  生成される `.env` に取り込んではならない。
-- 既に暗号化済みの `.env` が存在するが、
-  それに対応する鍵を取得できない場合は、
-  自動で新鍵を生成せずに終了する。
-- ローカル `.env.keys` からの鍵取得に失敗した場合は終了する。
-- OS ストアへの保存に失敗した場合は終了する。
-- 新規ブートストラップ後の `.env` 反映に失敗した場合は、
-  当該実行で更新したストアエントリと `.env` のロールバックを試みる。
-- 未対応プラットフォームまたはネイティブストア利用不可の場合も終了する。
-- ストア保存後に設定ファイル書き込みが失敗した場合は、
-  当該実行で更新したエントリと `.env` のロールバックを試みる。
-- `.env.keys` の削除に失敗した場合は必ず非 0 で終了し、
-  残存パスを明示して手動対応を促す。
+- When reusing an existing config file, if none of the OS store, parent-process environment, or local `.env.keys` provides a key, the command must end with a missing-existing-key error and instruct the user to obtain the key through an approved separate path before retrying.
+- If no usable key exists during a new setup, attempt a fresh bootstrap.
+- During fresh bootstrap, unrelated variables inherited from the parent environment must not be captured into the generated `.env`.
+- If an encrypted `.env` already exists but the corresponding key cannot be obtained, exit without generating a new key automatically.
+- If reading a key from local `.env.keys` fails, exit.
+- If saving to the OS store fails, exit.
+- If reflecting `.env` after fresh bootstrap fails, attempt to roll back the store entry and `.env` updated by that execution.
+- Exit on unsupported platforms or when the native store is unavailable.
+- If writing the config file fails after store persistence succeeds, attempt to roll back the entry and `.env` updated by that execution.
+- If deleting `.env.keys` fails, the command must always exit non-zero, explicitly show the remaining path, and instruct the user to handle it manually.
 
 ### 8.2 `run`
 
-#### 8.2.1 呼び出し形式
+#### 8.2.1 Invocation
 
 ```bash
 dotenvx-keychain run -- <command> [args...]
 dxk run -- <command> [args...]
 ```
 
-- `--` 以降を子プロセスのコマンドラインとして扱う。
-- `run` 自体に短縮形はない。
-- 子コマンドが指定されていない場合は使用法エラーで終了する。
+- Treat everything after `--` as the child-process command line.
+- `run` itself has no alias.
+- If no child command is provided, the command must end with a usage error.
 
-#### 8.2.2 ID 解決
+#### 8.2.2 ID Resolution
 
-- 親プロセスの `DOTENV_PRIVATE_KEY` が非空で設定されている場合は、
-  `run` は事前注入鍵モードで動作し、以下の ID 解決を行わない。
+- If the parent process `DOTENV_PRIVATE_KEY` is set to a non-empty value, `run` operates in pre-injected-key mode and must not perform the ID resolution below.
 
-1. 事前注入鍵がない場合だけ、
-   [7.1](#71-run-時のプロジェクトルート解決) に従って
-   プロジェクトルートを決める。
-2. そのルートに `.dotenvx-keychain` があれば `id` を読む。
-3. 見つからなければ、そのルートから自動 ID を生成する。
+1. Only if there is no pre-injected key, determine the project root according to [7.1](#71-project-root-resolution-during-run).
+2. If `.dotenvx-keychain` exists at that root, read its `id`.
+3. If not found, auto-generate the ID from that root.
 
-#### 8.2.3 実行フロー
+#### 8.2.3 Execution Flow
 
-1. 事前注入鍵があればそれを使用する。
-   なければ解決した ID に対応する秘密鍵を OS ストアから取得する。
-2. 現在の環境変数をコピーし、
-   `DOTENV_PRIVATE_KEY` を子プロセス用に設定する。
-3. `dotenvx run -- <command> [args...]` を子プロセスとして起動する。
-4. 子プロセスの終了コードまたはシグナルをそのまま返す。
+1. If a pre-injected key exists, use it. Otherwise, retrieve the secret key for the resolved ID from the OS store.
+2. Copy the current environment variables and set `DOTENV_PRIVATE_KEY` for the child process.
+3. Start `dotenvx run -- <command> [args...]` as a child process.
+4. Return the child process exit code or signal unchanged.
 
-#### 8.2.4 失敗時ルール
+#### 8.2.4 Failure Rules
 
-- 事前注入鍵が存在する場合は、
-  ネイティブストア利用不可だけを理由に失敗させない。
-- 事前注入鍵がなく、該当 ID の鍵が見つからない場合は、
-  `init` の再実行または承認済みの別経路からの鍵注入を促す
-  メッセージ付きで終了する。
-- `dotenvx` の起動に失敗した場合は、
-  依存関係エラーとして終了する。
-- 未対応プラットフォームまたは、事前注入鍵がない状態での
-  ネイティブストア利用不可の場合は、
-  環境要件エラーとして終了する。
-- 設定ファイルが壊れている場合は、
-  構文エラーとして終了する。
-- CI/CD や本番環境で事前注入鍵がないまま利用した場合は、
-  プラットフォーム標準のシークレット注入を促す
-  メッセージ付きで終了する。
+- If a pre-injected key exists, the command must not fail solely because the native store is unavailable.
+- If there is no pre-injected key and the key for the resolved ID cannot be found, exit with a message that instructs the user to rerun `init` or inject the key through an approved separate path.
+- If starting `dotenvx` fails, exit with a dependency error.
+- If the platform is unsupported, or the native store is unavailable while no pre-injected key exists, exit with an environment-prerequisite error.
+- If the config file is malformed, exit with a syntax error.
+- If the command is used in CI/CD or production without a pre-injected key, exit with a message that instructs the user to inject secrets through the platform-standard mechanism.
 
 ### 8.3 `list`
 
-#### 8.3.1 呼び出し形式
+#### 8.3.1 Invocation
 
 ```bash
 dotenvx-keychain list
 dxk ls
 ```
 
-#### 8.3.2 振る舞い
+#### 8.3.2 Behavior
 
-- `dotenvx-keychain` 名前空間に保存された ID 一覧を列挙する。
-- 出力は標準出力へ 1 行 1 ID のプレーンテキストとする。
-- 並び順は昇順ソートとする。
-- 鍵文字列、伏字、メタデータは表示しない。
-- JSON 出力や静音モードは提供しない。
-- エントリが 0 件の場合は、標準出力を空のまま終了してよい。
+- Enumerate the IDs stored in the `dotenvx-keychain` namespace.
+- Write plain text to stdout, one ID per line.
+- Sort output in ascending order.
+- Do not display the key string, redacted values, or metadata.
+- Do not provide JSON output or quiet mode.
+- If there are zero entries, the command may exit with stdout left empty.
 
 ### 8.4 `remove`
 
-#### 8.4.1 呼び出し形式
+#### 8.4.1 Invocation
 
 ```bash
 dotenvx-keychain remove <id>
 dxk rm <id>
 ```
 
-#### 8.4.2 振る舞い
+#### 8.4.2 Behavior
 
-- 指定 ID に完全一致するエントリのみ削除する。
-- `.dotenvx-keychain` や `.env` などのプロジェクトファイルは変更しない。
-- 削除成功時は、削除した ID をメッセージで表示する。
-- 対象が存在しない場合は未検出エラーとして終了する。
-- 対話確認は行わない。
+- Delete only the entry that exactly matches the specified ID.
+- Do not modify project files such as `.dotenvx-keychain` or `.env`.
+- On successful deletion, display a message that includes the removed ID.
+- If the target does not exist, exit with a not-found error.
+- Do not prompt for interactive confirmation.
 
-## 9. 終了コード
+## 9. Exit Codes
 
-- `0`: 成功
-- `2`: 使用法または入力値エラー
-- `3`: 解決した ID の鍵が見つからない、
-  または既存設定再利用の `init` に必要な鍵が供給されていない
-- `4`: `dotenvx` または OS ストア連携の失敗
-- `5`: `.env.keys` の削除失敗など、
-  セキュリティ上の後処理失敗
+- `0`: Success
+- `2`: Usage or input-value error
+- `3`: The key for the resolved ID was not found, or the required key for an `init` that reuses existing config was not supplied
+- `4`: Failure in `dotenvx` or OS store integration
+- `5`: Security-relevant post-processing failure, such as failure to delete `.env.keys`
 
-## 10. セキュリティ要件
+## 10. Security Requirements
 
-- 鍵文字列を標準出力、標準エラー、ログに出してはならない。
-- `list` は鍵の存在確認に必要な ID 以外を出してはならない。
-- `run` の環境変数注入は起動した子プロセス系統に限定する。
-- `init` 完了時にワーキングツリー内へ鍵ファイルを残してはならない。
-- `init` が新規ブートストラップで `.env` を生成または更新する場合も、
-  親プロセス環境由来の無関係な値を取り込んではならない。
-- 例外メッセージやスタックトレースに秘密値を含めてはならない。
+- The key string must never appear in stdout, stderr, or logs.
+- `list` must not output anything other than the IDs needed to confirm key presence.
+- `run` must limit environment-variable injection to the spawned child-process tree.
+- `init` must not leave key files in the working tree on completion.
+- Even when `init` generates or updates `.env` through fresh bootstrap, it must not capture unrelated values from the parent-process environment.
+- Secret values must not appear in exception messages or stack traces.
 
-## 11. 受け入れ基準
+## 11. Acceptance Criteria
 
-- 新規ディレクトリで、事前に `.env.keys` が存在する状態で
-  `init` を引数なし実行すると、
-  自動生成 ID を持つ `.dotenvx-keychain` が作成され、
-  `.env.keys` は残らない。
-- 新規ディレクトリで、ローカルストア、`DOTENV_PRIVATE_KEY`、`.env.keys` の
-  いずれもない状態で `init` を引数なし実行すると、
-  自動生成 ID を持つ `.dotenvx-keychain` と暗号化済み `.env` が作成され、
-  `.env.keys` は残らない。
-- 新規ディレクトリで、平文の `.env` だけが存在し、
-  ローカルストア、`DOTENV_PRIVATE_KEY`、`.env.keys` の
-  いずれもない状態で `init` を実行すると、
-  既存の `.env` 内容は暗号化済み `.env` に置き換わり、
-  対応する鍵が OS ストアへ保存される。
-- 既存の `.dotenvx-keychain` があるディレクトリで
-  `init` を引数なし実行すると、既存 `id` を再利用する。
-- 既存の `.dotenvx-keychain` があるディレクトリで、
-  ローカルストアに鍵がなく、`DOTENV_PRIVATE_KEY` も未設定で、
-  `.env.keys` も存在しないまま `init` を引数なし実行すると、
-  新鍵を生成せず非 0 終了になる。
-- 暗号化済みの `.env` が既に存在する新規ディレクトリで、
-  それに対応する鍵がローカルストア、`DOTENV_PRIVATE_KEY`、`.env.keys` の
-  いずれからも得られない場合は、
-  新鍵を生成せず非 0 終了になる。
-- 既存の `.dotenvx-keychain` があるディレクトリで、
-  ローカルストアに鍵がなくても `DOTENV_PRIVATE_KEY` が設定されていれば、
-  `init` はその値を保存して成功する。
-- 新規または既存ディレクトリで、ローカルストアに鍵がなくても
-  `.env.keys` が存在すれば、`init` はそこから鍵を保存して成功する。
-- 子ディレクトリから `run` を実行しても、
-  祖先ディレクトリの `.dotenvx-keychain` を解決できる。
-- `DOTENV_PRIVATE_KEY` が事前設定された状態で `run` を実行すると、
-  `.dotenvx-keychain` やローカルストアが参照可能でなくても、
-  その値を使って子プロセスを起動できる。
-- macOS、Windows、Linux の各対応 OS で、
-  `init`、`run`、`list`、`remove` が同じ論理契約で動作する。
-- `dxk init`、`dxk run -- <command> [args...]`、`dxk ls`、`dxk rm <id>` が、
-  対応する正規名と同じ終了コードと出力契約で動作する。
-- `npm pack` で生成した tarball を一時環境へ導入すると、
-  `dotenvx-keychain` と `dxk` の両方が
-  グローバル `dotenvx` なしで起動できる。
-- `npm pack` で生成した tarball には
-  CLI 実行に必要な成果物、README、LICENSE が含まれる。
-- 鍵が存在しない状態で `run` を実行すると、
-  `init` を促す非 0 終了になる。
-- native Linux で Secret Service が利用できない状態、または
-  WSL で Windows Credential Manager 連携が利用できない状態では、
-  平文へフォールバックせず、原因を示す非 0 終了になる。
-- 未対応プラットフォームでは、
-  すべてのコマンドが明示的な未対応エラーで終了する。
-- `list` の出力に鍵文字列が含まれない。
-- `remove` はキーチェーンだけを変更し、
-  `.dotenvx-keychain` は変更しない。
-- `run -- node -e "0"` の 20 回連続実行で、
-  直接 `dotenvx run -- node -e "0"` を実行した場合に対する
-  追加オーバーヘッドの中央値が 200 ms 以下、
-  p95 が 500 ms 以下に収まる。
+- In a new directory where `.env.keys` already exists, running `init` with no arguments creates `.dotenvx-keychain` with an auto-generated ID and leaves no `.env.keys` behind.
+- In a new directory where the local store, `DOTENV_PRIVATE_KEY`, and `.env.keys` are all absent, running `init` with no arguments creates `.dotenvx-keychain` with an auto-generated ID and an encrypted `.env`, and leaves no `.env.keys` behind.
+- In a new directory where only a plaintext `.env` exists and the local store, `DOTENV_PRIVATE_KEY`, and `.env.keys` are all absent, running `init` replaces the existing `.env` contents with an encrypted `.env` and stores the corresponding key in the OS store.
+- In a directory that already has `.dotenvx-keychain`, running `init` with no arguments reuses the existing `id`.
+- In a directory that already has `.dotenvx-keychain`, if the local store has no key, `DOTENV_PRIVATE_KEY` is unset, and `.env.keys` is also absent, running `init` with no arguments exits non-zero without generating a new key.
+- In a new directory that already contains an encrypted `.env`, if the corresponding key cannot be obtained from the local store, `DOTENV_PRIVATE_KEY`, or `.env.keys`, the command exits non-zero without generating a new key.
+- In a directory that already has `.dotenvx-keychain`, if `DOTENV_PRIVATE_KEY` is set, `init` succeeds by storing that value even when the local store has no key.
+- In a new or existing directory, if `.env.keys` exists even though the local store has no key, `init` succeeds by storing the key from that file.
+- Running `run` from a child directory still resolves the ancestor directory's `.dotenvx-keychain`.
+- If `DOTENV_PRIVATE_KEY` is pre-set, running `run` can start the child process with that value even when `.dotenvx-keychain` or the local store cannot be consulted.
+- On each supported OS, macOS, Windows, and Linux, `init`, `run`, `list`, and `remove` behave under the same logical contract.
+- `dxk init`, `dxk run -- <command> [args...]`, `dxk ls`, and `dxk rm <id>` behave with the same exit codes and output contract as their canonical counterparts.
+- If a tarball generated by `npm pack` is installed into a temporary environment, both `dotenvx-keychain` and `dxk` can start without a global `dotenvx`.
+- A tarball generated by `npm pack` includes the artifacts required for CLI execution, plus README and LICENSE.
+- Running `run` when no key exists ends non-zero and instructs the user to run `init`.
+- If Secret Service is unavailable on native Linux, or Windows Credential Manager integration is unavailable on WSL, the command ends non-zero without falling back to plaintext and reports the cause.
+- On unsupported platforms, every command exits with an explicit unsupported-platform error.
+- The output of `list` does not include the key string.
+- `remove` changes only the keychain and does not modify `.dotenvx-keychain`.
+- Across 20 consecutive `run -- node -e "0"` executions, the median additional overhead versus direct `dotenvx run -- node -e "0"` stays at 200 ms or less, and p95 stays at 500 ms or less.
 
-## 12. 将来検討事項
+## 12. Future Considerations
 
-- 複数鍵形式や複数名前空間を扱う拡張の要否を再評価する。
-- JSON 出力や静音モードが必要になる自動化ユースケースを整理する。
-- チーム共有向けの安全な鍵移行手段が必要かを再評価する。
-- `dotenvx` 側に鍵生成専用の安全な公式インターフェースが追加された場合、
-  現在の placeholder ベース bootstrap をどこまで簡素化できるか再評価する。
+- Reevaluate whether support for multiple key formats or multiple namespaces is needed.
+- Clarify what automation use cases would justify JSON output or quiet mode.
+- Reevaluate whether a safe key-migration path for team sharing is necessary.
+- If `dotenvx` adds a safe official interface dedicated to key generation, re-evaluate how much the current placeholder-based bootstrap can be simplified.
