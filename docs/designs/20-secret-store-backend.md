@@ -99,19 +99,24 @@ type SecretStoreFactory = {
 
 ### 4.3 Linux
 
-- Secret Service API 互換バックエンドを前提とする。
+- native Linux では Secret Service API 互換バックエンドを前提とする。
 - 書き込み先は既定コレクションとする。
 - 少なくとも `service=dotenvx-keychain` と `id=<id>` を
   検索属性として持たせる。
 - D-Bus セッションが存在しない場合は `backend-unavailable` とする。
 - 既定コレクションが存在しない、またはアンロック不能な場合も
   `backend-unavailable` とする。
-- headless Linux や WSL のように desktop login が無い環境では、
+- headless Linux のように desktop login が無い環境では、
   `gnome-keyring-daemon --login` と `--start` のような明示初期化を行わないと
   `login` collection が実体化しない場合がある。
 - `list` は `service=dotenvx-keychain` で絞り込み、
   `id` 属性だけを返す。
 - 製品名ではなく Secret Service 互換性だけで可否を判定する。
+
+WSL では別扱いとし、現在の Windows ログインユーザーの Credential Manager を
+Windows と同じ `dotenvx-keychain/<id>` の TargetName で利用する。
+Linux 側からは `powershell.exe` 経由の interop で到達し、利用不能時は
+`backend-unavailable` として扱う。
 
 ### 4.4 各 OS の共通制約
 
@@ -131,7 +136,7 @@ type SecretStoreFactory = {
 
 - `darwin`: macOS 実装を使う。
 - `win32`: Windows 実装を使う。
-- `linux`: Linux 実装を使う。
+- `linux`: native Linux 実装または WSL 実装を使う。
 - それ以外: `unsupported-platform` を返す。
 
 `create(platform)` は初回利用時に 1 回だけ初期化し、
@@ -184,4 +189,7 @@ CLI への引き渡し規則:
   - 現在のログインセッションに D-Bus session があること
   - Secret Service 互換の keyring daemon が動作していること
   - 既定コレクションが存在し、アンロック済みであること
+- WSL では復旧手順として、少なくとも次の確認を促す。
+  - Linux 側から `powershell.exe` を起動できること
+  - 現在の Windows ログインユーザーが Credential Manager を利用できること
 - 内部例外の生文面や秘密値は、その案内文へ直接含めない。

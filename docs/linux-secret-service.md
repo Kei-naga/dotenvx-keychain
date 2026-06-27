@@ -1,23 +1,28 @@
-# Linux Secret Service 前提と検証メモ
+# Linux Secret Service と WSL 検証メモ
 
 ## 1. 目的
 
-- Linux で `dotenvx-keychain` の native secret store を使うための前提条件を 1 か所に集約する。
-- README には要点だけを残し、Linux / WSL / headless session 向けの具体的な確認手順はこの文書に寄せる。
+- native Linux で `dotenvx-keychain` の Secret Service backend を使うための前提条件を 1 か所に集約する。
+- README には要点だけを残し、native Linux 向けの具体的な確認手順と、WSL で Linux backend を強制したい場合の診断手順はこの文書に寄せる。
 - release 前の `npm run test:real-store-smoke` を Linux で再現するための最小手順を残す。
 
 ## 2. 対象
 
 - `process.platform === "linux"` で動く `dotenvx-keychain`
-- `keytar` backend と Secret Service 互換ストア
-- desktop Linux だけでなく、headless Linux と WSL を含む
+- native Linux の `keytar` backend と Secret Service 互換ストア
+- desktop Linux だけでなく、headless Linux と、必要時に Linux backend を強制する WSL 診断フロー
+
+通常の WSL 実行では、`dotenvx-keychain` は Linux Secret Service ではなく
+Windows Credential Manager を使う。WSL でこの文書が直接必要になるのは、
+native Linux backend の切り分けや `npm run test:real-store-smoke:wsl` による
+比較診断を行う場合である。
 
 ## 3. 必須前提
 
-Linux では、少なくとも次の条件が揃っていないと native store は使えない。
+native Linux backend では、少なくとも次の条件が揃っていないと store は使えない。
 
 1. `libsecret-1.so.0` がインストールされ、`keytar` native addon から読み込めること
-2. WSL では Windows 側ではなく Linux-native の `node` / `npm` を使うこと
+2. WSL 診断時も Windows 側ではなく Linux-native の `node` / `npm` を使うこと
 3. 現在のログイン session に D-Bus session bus があること
 4. Secret Service 互換 daemon が動作していること
 5. 既定 collection が存在し、書き込み可能であること
@@ -110,8 +115,9 @@ npm run test:real-store-smoke
 
 ### 5.6 WSL helper script を使う
 
-WSL では ambient user session の default collection が壊れた alias 状態で残ることがあるため、
-repository には isolated session を張る wrapper command を追加している。
+WSL で native Linux backend を比較診断したい場合、ambient user session の
+default collection が壊れた alias 状態で残ることがあるため、repository には
+isolated session を張って Linux backend を強制する wrapper command を追加している。
 
 ```bash
 npm run test:real-store-smoke:wsl
@@ -120,10 +126,10 @@ npm run test:real-store-smoke:wsl
 期待値:
 
 - `dbus-run-session` と `gnome-keyring-daemon` 初期化を内部で行った上で
-  `test/smoke/realSecretStore.test.ts` が通る
-- WSL で通常の `npm run test:real-store-smoke` が失敗する場合の優先入口として使える
+  `test/smoke/realSecretStore.test.ts` が Linux backend で通る
+- WSL の通常 runtime path を検証するコマンドではなく、Linux backend の比較診断入口として使える
 
-## 6. headless Linux / WSL の確認済み手順
+## 6. headless Linux / WSL 診断の確認済み手順
 
 Ubuntu 24.04.1 LTS on WSL2 では、ambient user session の既定 collection alias が壊れた状態で残り、
 そのままでは `secret-tool` と `keytar` の両方が
