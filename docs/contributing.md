@@ -59,6 +59,13 @@ Start with the smallest test set that protects the v1 contract in
 - lint, typecheck, and the automated test suite must stay fast enough to run on
   every PR
 
+Current local baseline commands:
+
+- `npm run lint`
+- `npm run format:check`
+- `npm run typecheck`
+- `npm test`
+
 ### Minimum unit-test targets
 
 - explicit ID validation
@@ -89,6 +96,9 @@ Start with the smallest test set that protects the v1 contract in
 - packed-install checks such as `npm pack`, `npx dotenvx-keychain`, and `dxk`
   alias resolution can run on release preparation or before making status
   checks required
+
+For Linux / WSL environment prerequisites and the verified Secret Service smoke
+flow, refer to [linux-secret-service.md](./linux-secret-service.md).
 
 ### Exit criteria for required status checks
 

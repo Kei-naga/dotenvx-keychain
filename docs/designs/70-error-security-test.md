@@ -104,6 +104,8 @@
 - 設定ファイル読込の `not-found` と `invalid-json` の分離
 - Windows シェル経由判定
 - メッセージ整形時の秘密値除外
+- 親環境、Secret Store、ローカル `dotenvx` 読み取りの各経路で、
+  秘密値が stdout / stderr に出ないこと
 
 ### 6.2 結合テスト
 
@@ -156,8 +158,15 @@
 - `npm pack` 後の tarball を一時ディレクトリへ導入し、
   `dotenvx-keychain` と `dxk` の両方が起動することを
   リリース前の必須スモークとする。
+- `npm run test:real-store-smoke` は、
+  `darwin` / `linux` / `win32` の実ストア契約確認として維持するが、
+  v1 では常時 PR CI の required gate には含めず、
+  リリース前確認または専用ジョブに置く。
 - Linux の Secret Service 利用不可ケースは、
   自動化環境で安定再現できない場合に限り手動確認へ残してよい。
+- Linux の Secret Service 利用不可ケースでは、
+  平文フォールバック禁止を維持したまま、README で前提条件と
+  復旧手順を案内する。
 
 ## 7. 前提
 
@@ -167,5 +176,7 @@
 
 ## 8. 未確定事項
 
-- 実ストアを使う OS 別スモークを、
-  常時 CI に含めるか、リリース前ジョブへ分離するか。
+- 設計上の未確定事項は現時点ではない。
+- `darwin` / `linux` の real-store smoke 実行結果と、
+  Linux の Secret Service 利用不可ケースの実測結果は、
+  実装メモと README で継続管理する。

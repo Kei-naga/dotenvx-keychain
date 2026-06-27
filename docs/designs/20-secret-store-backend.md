@@ -106,6 +106,9 @@ type SecretStoreFactory = {
 - D-Bus セッションが存在しない場合は `backend-unavailable` とする。
 - 既定コレクションが存在しない、またはアンロック不能な場合も
   `backend-unavailable` とする。
+- headless Linux や WSL のように desktop login が無い環境では、
+  `gnome-keyring-daemon --login` と `--start` のような明示初期化を行わないと
+  `login` collection が実体化しない場合がある。
 - `list` は `service=dotenvx-keychain` で絞り込み、
   `id` 属性だけを返す。
 - 製品名ではなく Secret Service 互換性だけで可否を判定する。
@@ -173,6 +176,12 @@ CLI への引き渡し規則:
 - `list` と `remove` を成立させるため、
   バックエンドは列挙可能でなければならない。
 
-## 9. 未確定事項
+## 9. Linux 利用不可時の案内
 
-- Linux で利用不可時に案内する復旧手順の文面。
+- 利用者向けメッセージは、まず native secret store が利用不可であることを短く伝える。
+- Linux では復旧手順として、少なくとも次の確認を促す。
+  - `libsecret` ランタイムが導入され、読み込み可能であること
+  - 現在のログインセッションに D-Bus session があること
+  - Secret Service 互換の keyring daemon が動作していること
+  - 既定コレクションが存在し、アンロック済みであること
+- 内部例外の生文面や秘密値は、その案内文へ直接含めない。
