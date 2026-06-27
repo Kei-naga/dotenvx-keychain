@@ -45,11 +45,20 @@ async function pathExists(filePath: string): Promise<boolean> {
 }
 
 async function deleteFile(filePath: string): Promise<void> {
-  await rm(filePath);
+  await rm(filePath, { force: true });
 }
 
 function isNonEmpty(value: string | undefined): value is string {
   return typeof value === "string" && value.length > 0;
+}
+
+function isMissingFileError(error: unknown): error is NodeJS.ErrnoException {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    (error as NodeJS.ErrnoException).code === "ENOENT"
+  );
 }
 
 function formatSecretStoreError(error: unknown): string {
@@ -232,9 +241,13 @@ export async function initCommand(
   if (await fileExists(envKeysPath)) {
     try {
       await deleteFileImpl(envKeysPath);
-    } catch {
+    } catch (error) {
+      if (isMissingFileError(error)) {
+        // Another process may have removed .env.keys after the existence check.
+      } else {
       stderr(`Failed to remove local key file: ${envKeysPath}`);
       return CLI_EXIT_CODE.postProcessFailure;
+      }
     }
   }
 

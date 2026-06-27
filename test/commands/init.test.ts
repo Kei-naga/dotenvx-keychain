@@ -47,6 +47,12 @@ function createDotenvxAdapter(
   return { readPrivateKey };
 }
 
+function createMissingFileError(): NodeJS.ErrnoException {
+  const error = new Error("file already removed") as NodeJS.ErrnoException;
+  error.code = "ENOENT";
+  return error;
+}
+
 afterEach(async () => {
   await Promise.all(
     tempDirectories
@@ -215,6 +221,39 @@ describe("initCommand", () => {
     expect(output.stderr).toContain(
       `Failed to remove local key file: ${envKeysPath}`,
     );
+  });
+
+  it("ignores ENOENT when .env.keys is already gone during cleanup", async () => {
+    const directory = await createTempDirectory();
+    const envKeysPath = path.join(directory, ".env.keys");
+    const store = new MockSecretStore();
+    const output = createOutputCapture();
+
+    await writeFile(envKeysPath, "placeholder", "utf8");
+
+    const exitCode = await initCommand(
+      { id: "app-a" },
+      {
+        cwd: directory,
+        env: {
+          DOTENV_PRIVATE_KEY: "from-env",
+        },
+        stdout: output.emitStdout,
+        stderr: output.emitStderr,
+        secretStoreFactory: {
+          create: async () => store,
+        },
+        dotenvxAdapter: createDotenvxAdapter(async () => null),
+        deleteFile: async (filePath) => {
+          await rm(filePath, { force: true });
+          throw createMissingFileError();
+        },
+      },
+    );
+
+    expect(exitCode).toBe(0);
+    expect(output.stderr).toEqual([]);
+    await expect(readFile(envKeysPath, "utf8")).rejects.toBeTruthy();
   });
 
   it("returns exit 3 when no key source is available for an existing config", async () => {
