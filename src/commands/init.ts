@@ -65,7 +65,10 @@ async function readTextFile(filePath: string): Promise<string> {
   return await readFile(filePath, "utf8");
 }
 
-async function writeTextFile(filePath: string, contents: string): Promise<void> {
+async function writeTextFile(
+  filePath: string,
+  contents: string,
+): Promise<void> {
   await writeFile(filePath, contents, "utf8");
 }
 
@@ -303,13 +306,11 @@ export async function initCommand(
       stderr(
         "Provide DOTENV_PRIVATE_KEY or restore the key before running init again.",
       );
-    } else if (resolvedKey.requiresExistingKey) {
+    } else {
       stderr("No reusable key was found for the existing encrypted .env.");
       stderr(
         "Provide DOTENV_PRIVATE_KEY or restore .env.keys before running init again.",
       );
-    } else {
-      stderr("Failed to bootstrap a new dotenvx key.");
     }
     return CLI_EXIT_CODE.notFound;
   }
@@ -322,7 +323,10 @@ export async function initCommand(
 
   if (shouldWriteBootstrapEnv) {
     try {
-      previousEnvContents = await readOptionalTextFile(envPath, readTextFileImpl);
+      previousEnvContents = await readOptionalTextFile(
+        envPath,
+        readTextFileImpl,
+      );
     } catch {
       stderr("Failed to read project env: .env");
       return CLI_EXIT_CODE.infrastructure;
