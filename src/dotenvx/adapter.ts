@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
-import { access } from "node:fs/promises";
+import { access, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import path from "node:path";
 
 import { resolveDotenvxBinary } from "./resolver.js";
@@ -22,9 +23,18 @@ export type CaptureProcess = (
   options: CapturedProcessOptions,
 ) => Promise<CapturedProcessResult>;
 
+export interface DotenvxBootstrapResult {
+  privateKey: string;
+  encryptedEnvContents: string;
+}
+
 export interface DotenvxAdapter {
   readPrivateKey(projectRoot: string): Promise<string | null>;
+  bootstrapProjectEnv(projectRoot: string): Promise<DotenvxBootstrapResult>;
 }
+
+const BOOTSTRAP_PLACEHOLDER_KEY = "DXK_BOOTSTRAP_PLACEHOLDER";
+const BOOTSTRAP_PLACEHOLDER_VALUE = "bootstrap";
 
 export class DotenvxAdapterError extends Error {
   public constructor(message: string, cause?: unknown) {
@@ -42,7 +52,28 @@ async function pathExists(filePath: string): Promise<boolean> {
   }
 }
 
-function parsePrivateKey(stdout: string): string | null {
+function isMissingFileError(error: unknown): error is NodeJS.ErrnoException {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    (error as NodeJS.ErrnoException).code === "ENOENT"
+  );
+}
+
+async function readOptionalFile(filePath: string): Promise<string | null> {
+  try {
+    return await readFile(filePath, "utf8");
+  } catch (error) {
+    if (isMissingFileError(error)) {
+      return null;
+    }
+
+    throw error;
+  }
+}
+
+function parseSingleLineValue(stdout: string): string | null {
   const lines = stdout
     .split(/\r?\n/u)
     .map((line) => line.trim())
@@ -52,7 +83,55 @@ function parsePrivateKey(stdout: string): string | null {
     return null;
   }
 
-  return lines[0] ?? null;
+  const value = lines[0] ?? null;
+
+  if (value === null || value === "null") {
+    return null;
+  }
+
+  return value;
+}
+
+function createSanitizedEnv(baseEnv: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  const allowedKeys = [
+    "APPDATA",
+    "HOME",
+    "HOMEDRIVE",
+    "HOMEPATH",
+    "LOCALAPPDATA",
+    "PATH",
+    "PATHEXT",
+    "SYSTEMROOT",
+    "TEMP",
+    "TERM",
+    "TMP",
+    "TMPDIR",
+    "USERPROFILE",
+    "WINDIR",
+  ] as const;
+
+  const sanitizedEnv: NodeJS.ProcessEnv = {};
+
+  for (const key of allowedKeys) {
+    const value = baseEnv[key];
+
+    if (typeof value === "string" && value.length > 0) {
+      sanitizedEnv[key] = value;
+    }
+  }
+
+  return sanitizedEnv;
+}
+
+function shouldSeedPlaceholderEnv(sourceEnvContents: string | null): boolean {
+  return sourceEnvContents === null || sourceEnvContents.length === 0;
+}
+
+function stripBootstrapPlaceholder(contents: string): string {
+  return contents.replace(
+    new RegExp(`^${BOOTSTRAP_PLACEHOLDER_KEY}=encrypted:[^\n]*(?:\n|$)`, "mu"),
+    "",
+  );
 }
 
 export async function defaultCaptureProcess(
@@ -95,6 +174,7 @@ export class DefaultDotenvxAdapter implements DotenvxAdapter {
   public constructor(
     private readonly resolveBinary: () => Promise<string> = resolveDotenvxBinary,
     private readonly captureProcess: CaptureProcess = defaultCaptureProcess,
+    private readonly baseEnv: NodeJS.ProcessEnv = process.env,
   ) {}
 
   public async readPrivateKey(projectRoot: string): Promise<string | null> {
@@ -107,6 +187,94 @@ export class DefaultDotenvxAdapter implements DotenvxAdapter {
       return null;
     }
 
+    const result = await this.runDotenvx(
+      ["keypair", "DOTENV_PRIVATE_KEY"],
+      projectRoot,
+    );
+
+    if (result.exitCode !== 0 || result.signal !== null) {
+      throw new DotenvxAdapterError(
+        "dotenvx failed while reading a local key.",
+      );
+    }
+
+    return parseSingleLineValue(result.stdout);
+  }
+
+  public async bootstrapProjectEnv(
+    projectRoot: string,
+  ): Promise<DotenvxBootstrapResult> {
+    const sourceEnvPath = path.join(projectRoot, ".env");
+    const sourceEnvContents = await readOptionalFile(sourceEnvPath);
+    const tempProjectRoot = await mkdtemp(path.join(tmpdir(), "dxk-dotenvx-"));
+    const shouldUsePlaceholder = shouldSeedPlaceholderEnv(sourceEnvContents);
+    const tempEnvContents = shouldUsePlaceholder
+      ? `${BOOTSTRAP_PLACEHOLDER_KEY}=${BOOTSTRAP_PLACEHOLDER_VALUE}\n`
+      : sourceEnvContents;
+
+    try {
+      if (tempEnvContents !== null) {
+        await writeFile(path.join(tempProjectRoot, ".env"), tempEnvContents, "utf8");
+      }
+
+      const encryptResult = await this.runDotenvx(["encrypt"], tempProjectRoot);
+
+      if (encryptResult.exitCode !== 0 || encryptResult.signal !== null) {
+        throw new DotenvxAdapterError(
+          "dotenvx failed while bootstrapping a project key.",
+        );
+      }
+
+      const encryptedEnvContents = await readOptionalFile(
+        path.join(tempProjectRoot, ".env"),
+      );
+
+      if (!encryptedEnvContents) {
+        throw new DotenvxAdapterError(
+          "dotenvx did not produce an encrypted .env file.",
+        );
+      }
+
+      const privateKey = await this.readPrivateKeyFromProject(tempProjectRoot);
+
+      return {
+        privateKey,
+        encryptedEnvContents: shouldUsePlaceholder
+          ? stripBootstrapPlaceholder(encryptedEnvContents)
+          : encryptedEnvContents,
+      };
+    } finally {
+      await rm(tempProjectRoot, { recursive: true, force: true });
+    }
+  }
+
+  private async readPrivateKeyFromProject(projectRoot: string): Promise<string> {
+    const result = await this.runDotenvx(
+      ["keypair", "DOTENV_PRIVATE_KEY"],
+      projectRoot,
+    );
+
+    if (result.exitCode !== 0 || result.signal !== null) {
+      throw new DotenvxAdapterError(
+        "dotenvx failed while reading a local key.",
+      );
+    }
+
+    const privateKey = parseSingleLineValue(result.stdout);
+
+    if (!privateKey) {
+      throw new DotenvxAdapterError(
+        "dotenvx returned an unexpected key output.",
+      );
+    }
+
+    return privateKey;
+  }
+
+  private async runDotenvx(
+    args: string[],
+    cwd: string,
+  ): Promise<CapturedProcessResult> {
     let binaryPath: string;
 
     try {
@@ -123,30 +291,17 @@ export class DefaultDotenvxAdapter implements DotenvxAdapter {
     try {
       result = await this.captureProcess({
         file: process.execPath,
-        args: [binaryPath, "keypair", "DOTENV_PRIVATE_KEY"],
-        cwd: projectRoot,
+        args: [binaryPath, ...args],
+        cwd,
+        env: createSanitizedEnv(this.baseEnv),
       });
     } catch (error) {
       throw new DotenvxAdapterError(
-        "Failed to run dotenvx while reading a local key.",
+        `Failed to run dotenvx for ${args[0] ?? "the requested command"}.`,
         error,
       );
     }
 
-    if (result.exitCode !== 0 || result.signal !== null) {
-      throw new DotenvxAdapterError(
-        "dotenvx failed while reading a local key.",
-      );
-    }
-
-    const privateKey = parsePrivateKey(result.stdout);
-
-    if (!privateKey) {
-      throw new DotenvxAdapterError(
-        "dotenvx returned an unexpected key output.",
-      );
-    }
-
-    return privateKey;
+    return result;
   }
 }

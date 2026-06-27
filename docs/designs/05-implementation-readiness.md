@@ -1,78 +1,71 @@
-# 設計: 実装着手前のブロッカー整理
+# 設計記録: 実装着手前の論点と採用結果
 
 ## 1. 目的
 
-- [仕様書](../spec.md) と既存の詳細設計を突き合わせ、
-  実装着手前に残っているブロッカーを明示する。
-- 既存文書に書かれていない設計論点を、
-  「今ここで決めるべきこと」と「実装スパイクへ切り出すこと」に分ける。
+- 実装着手前に論点だった項目と、実際に採用した方針を対比で残す。
+- 現在の設計書を読むときに、「どの判断が既に閉じた論点か」を明確にする。
 
 ## 2. 結論
 
-文書の責務分割自体は十分であり、
-`init` の鍵ブートストラップ契約は v1 で A 案を採用して閉じた。
+実装着手前に大きかった論点は、現在は次の方針で閉じている。
 
-現時点の主な実装ブロッカーは次の 1 点である。
+1. `init` の鍵ブートストラップ契約は、
+   「既存鍵の取り込みのみ」ではなく
+   「新規プロジェクトでは安全な隔離ブートストラップまで担う」で確定した。
+2. Secret Store 実装は `keytar` ベースの `SecretStore` 抽象で実装した。
+3. `init` の bootstrap は、project root 直実行ではなく
+   一時ディレクトリ + placeholder `.env` 方式で確定した。
 
-1. 3 OS を満たす Secret Store 実装方式が未決定のままである。
-
-`init` の自動鍵生成を含む B 案は、
-[90-future-init-key-generation.md](./90-future-init-key-generation.md) へ将来検討として切り出した。
-
-## 3. ブロッカー
+## 3. 採用した設計判断
 
 ### 3.1 `init` の鍵ブートストラップ契約
 
-v1 は A 案を採用し、`init` を「既存鍵の取り込みと隔離」に限定した。
-
-決定事項:
+採用結果:
 
 - `init` は OS ストア既存値、親プロセス環境変数、
-  既に存在する `.env.keys` のいずれかから鍵を取り込む。
-- `init` 自身は `.env` を変更して新規鍵生成を行わない。
-- 最初の暗号化エントリ作成は `dotenvx` 本体の責務とする。
+  既に存在する `.env.keys` / 暗号化済み `.env` から鍵を取り込める。
+- それでも鍵がなく、かつ `cwd/.dotenvx-keychain` も既存暗号化済み `.env` もないなら、
+  `init` 自身が新規ブートストラップを行う。
+- 既存設定や既存暗号化済み `.env` がある場合は、
+  自動で新鍵を生成して上書きしない。
 
-補足:
+採用理由:
 
-- 2026-06-12 の実コマンド確認では、`dotenvx encrypt` を
-  `.env` 不在または空ファイルのディレクトリで実行すると、
-  新しい `.env` と `.env.keys` を生成し、
-  親プロセス環境由来の変数群を書き込む挙動が見られた。
-- このため、B 案は v1 から外し、
-  [90-future-init-key-generation.md](./90-future-init-key-generation.md) へ切り出した。
+- fresh project で `init` 一発導入を求める要件があり、
+  「先に dotenvx 側で鍵を用意する」前提は UX 上の摩擦が大きかった。
+- 一方で既存暗号化状態に対する自動ローテーションは危険なため、
+  bootstrap 可否を明確に分ける必要があった。
 
-### 3.2 Secret Store 実装方式
+### 3.2 直接 `dotenvx encrypt` を使わない理由
 
-[20-secret-store-backend.md](./20-secret-store-backend.md) は
-論理抽象として十分だが、実装方式が未決定のままである。
+確認できたこと:
 
-現時点で確認できること:
+- `.env` 不在または空ファイルのディレクトリで `dotenvx encrypt` を実行すると、
+  新しい `.env` と `.env.keys` を生成する。
+- そのままでは、実行環境に残った変数群が `.env` へ混入し得る。
 
-- `keytar` は API 形状自体は近いが、公開リポジトリがアーカイブ済みである。
-- `cross-keychain` 系の新しい候補は存在するが、
-  file backend や自動フォールバックを持つものがあり、
-  本仕様の「平文・代替ストアへフォールバックしない」と衝突しやすい。
-- `list` と `remove` のために、
-  名前空間単位の列挙を 3 OS で安定提供できることが必須である。
+採用した対策:
 
-推奨方針:
+- [90-future-init-key-generation.md](./90-future-init-key-generation.md) に記録した通り、
+  一時ディレクトリと placeholder-only `.env` を使う。
+- `dotenvx` 実行環境は allowlist ベースでサニタイズする。
 
-- `SecretStore` 抽象は現在のまま維持する。
-- ライブラリ名を先に固定せず、短い実装スパイクで次を検証する。
+### 3.3 Secret Store 実装方式
 
-受け入れ条件:
+採用結果:
 
-- `set/get/list/remove` を 3 OS で同じ契約で提供できる
-- file backend や null backend を選ばずに固定できる
-- Linux で Secret Service 利用不可を明確に検出できる
-- Node.js の現行 LTS 系でビルド・配布できる
-- `npm pack` 後の利用形態でもネイティブ依存が破綻しない
+- `SecretStore` 抽象は維持しつつ、実装は `keytar` ベースで確定した。
+- unsupported platform や backend unavailable は、
+  明示的な exit `4` として扱う。
+- 平文ファイルや別 backend への自動フォールバックは行わない。
 
-## 4. 低リスクで決め切れる事項
+## 4. 現在も残る運用課題
 
-### 4.1 実装基盤
+- `keytar` の保守継続性と Node.js / OS 更新への追従確認
+- native-store smoke の OS マトリクス自動化
+- Linux の Secret Service 利用不可ケースの継続検証
 
-v1 実装基盤は次の方針で固定してよい。
+## 5. 低リスクで固定した実装基盤
 
 - 言語: TypeScript
 - モジュール形式: Node.js ESM
@@ -81,49 +74,10 @@ v1 実装基盤は次の方針で固定してよい。
 - テスト: Vitest
 - パッケージマネージャ: npm
 
-理由:
+## 6. 関連文書
 
-- CLI とテストの規模に対して最小構成である。
-- ネイティブ依存候補が混ざるため、初期段階で bundler を入れない方が安全。
-- `npm pack` 検証をそのままリリース導線へつなげやすい。
-
-### 4.2 Windows のシェル経由判定
-
-[30-cli-runtime-common.md](./30-cli-runtime-common.md) の
-Windows 例外には、具体アルゴリズムを追加してよい。
-
-推奨アルゴリズム:
-
-1. 子コマンド先頭トークンがパス区切りを含む場合は、そのパスを直接判定する。
-2. 含まない場合は `PATH` と `PATHEXT` を使って候補を探索する。
-3. 解決結果が `.cmd` または `.bat` ならシェル経由にする。
-4. それ以外は非シェル起動にする。
-
-## 5. テスト境界
-
-v1 のテスト計画は、次の 3 層まで文書化されていれば十分である。
-
-1. 純粋ロジックの単体テスト
-2. モックバックエンドを使うコマンド結合テスト
-3. OS ごとの最小スモークテストと `npm pack` スモークテスト
-
-推奨自動化範囲:
-
-- 単体テストとモック結合テストは全 OS で自動化する。
-- OS ネイティブストアを使う実ストア確認は、
-  まず最小の契約スモークだけを OS 別ジョブで自動化する。
-- Linux の「Secret Service 利用不可」ケースは、
-  自動化しづらければ手動確認項目として残してよい。
-
-## 6. 実装開始の判定基準
-
-次を満たせば、実装へ入ってよい。
-
-1. Secret Store の実装スパイク範囲を確定する
-2. [30-cli-runtime-common.md](./30-cli-runtime-common.md) の基盤方針を採用する
-3. [70-error-security-test.md](./70-error-security-test.md) に自動化境界を反映する
-
-## 7. 未確定事項
-
-- Secret Store 候補のスパイクを 1 本先に打つか、
-  先に CLI 骨格とモック実装から着手するか
+- [20-secret-store-backend.md](./20-secret-store-backend.md)
+- [35-dotenvx-adapter.md](./35-dotenvx-adapter.md)
+- [40-command-init.md](./40-command-init.md)
+- [70-error-security-test.md](./70-error-security-test.md)
+- [90-future-init-key-generation.md](./90-future-init-key-generation.md)

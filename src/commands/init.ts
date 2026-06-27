@@ -1,4 +1,4 @@
-import { access, rm } from "node:fs/promises";
+import { access, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { CLI_EXIT_CODE } from "../cli/exitCodes.js";
@@ -30,10 +30,23 @@ export interface InitCommandDependencies {
   dotenvxAdapter?: DotenvxAdapter;
   fileExists?: (filePath: string) => Promise<boolean>;
   deleteFile?: (filePath: string) => Promise<void>;
+  readTextFile?: (filePath: string) => Promise<string>;
+  writeTextFile?: (filePath: string, contents: string) => Promise<void>;
   writeConfig?: (projectRoot: string, id: string) => Promise<string>;
 }
 
-type InitKeySource = "secret-store" | "environment" | "local-dotenvx";
+type InitKeySource =
+  | "secret-store"
+  | "environment"
+  | "local-dotenvx"
+  | "bootstrap";
+
+interface ResolvedInitKey {
+  privateKey: string | null;
+  source: InitKeySource | null;
+  encryptedEnvContents: string | null;
+  requiresExistingKey: boolean;
+}
 
 async function pathExists(filePath: string): Promise<boolean> {
   try {
@@ -48,6 +61,14 @@ async function deleteFile(filePath: string): Promise<void> {
   await rm(filePath, { force: true });
 }
 
+async function readTextFile(filePath: string): Promise<string> {
+  return await readFile(filePath, "utf8");
+}
+
+async function writeTextFile(filePath: string, contents: string): Promise<void> {
+  await writeFile(filePath, contents, "utf8");
+}
+
 function isNonEmpty(value: string | undefined): value is string {
   return typeof value === "string" && value.length > 0;
 }
@@ -58,6 +79,31 @@ function isMissingFileError(error: unknown): error is NodeJS.ErrnoException {
     error !== null &&
     "code" in error &&
     (error as NodeJS.ErrnoException).code === "ENOENT"
+  );
+}
+
+async function readOptionalTextFile(
+  filePath: string,
+  readTextFileImpl: (filePath: string) => Promise<string>,
+): Promise<string | null> {
+  try {
+    return await readTextFileImpl(filePath);
+  } catch (error) {
+    if (isMissingFileError(error)) {
+      return null;
+    }
+
+    throw error;
+  }
+}
+
+function isEncryptedEnvFile(contents: string | null): boolean {
+  if (contents === null) {
+    return false;
+  }
+
+  return (
+    contents.includes("DOTENV_PUBLIC_KEY") || contents.includes("=encrypted:")
   );
 }
 
@@ -91,26 +137,77 @@ async function resolvePrivateKey(
   projectRoot: string,
   env: NodeJS.ProcessEnv,
   dotenvxAdapter: DotenvxAdapter,
-): Promise<{ privateKey: string | null; source: InitKeySource | null }> {
+  allowBootstrap: boolean,
+  readTextFileImpl: (filePath: string) => Promise<string>,
+): Promise<ResolvedInitKey> {
   const storedValue = await store.get(id);
 
   if (storedValue !== null) {
-    return { privateKey: storedValue, source: "secret-store" };
+    return {
+      privateKey: storedValue,
+      source: "secret-store",
+      encryptedEnvContents: null,
+      requiresExistingKey: false,
+    };
   }
 
   if (isNonEmpty(env.DOTENV_PRIVATE_KEY)) {
     return {
       privateKey: env.DOTENV_PRIVATE_KEY,
       source: "environment",
+      encryptedEnvContents: null,
+      requiresExistingKey: false,
     };
   }
 
   const localValue = await dotenvxAdapter.readPrivateKey(projectRoot);
 
+  if (localValue !== null) {
+    return {
+      privateKey: localValue,
+      source: "local-dotenvx",
+      encryptedEnvContents: null,
+      requiresExistingKey: false,
+    };
+  }
+
+  const envContents = await readOptionalTextFile(
+    path.join(projectRoot, ".env"),
+    readTextFileImpl,
+  );
+  const existingEncryptedEnv = isEncryptedEnvFile(envContents);
+
+  if (!allowBootstrap || existingEncryptedEnv) {
+    return {
+      privateKey: null,
+      source: null,
+      encryptedEnvContents: null,
+      requiresExistingKey: existingEncryptedEnv,
+    };
+  }
+
+  const bootstrapResult = await dotenvxAdapter.bootstrapProjectEnv(projectRoot);
+
   return {
-    privateKey: localValue,
-    source: localValue === null ? null : "local-dotenvx",
+    privateKey: bootstrapResult.privateKey,
+    source: "bootstrap",
+    encryptedEnvContents: bootstrapResult.encryptedEnvContents,
+    requiresExistingKey: false,
   };
+}
+
+async function restoreProjectEnv(
+  envPath: string,
+  previousContents: string | null,
+  writeTextFileImpl: (filePath: string, contents: string) => Promise<void>,
+  deleteFileImpl: (filePath: string) => Promise<void>,
+): Promise<void> {
+  if (previousContents === null) {
+    await deleteFileImpl(envPath);
+    return;
+  }
+
+  await writeTextFileImpl(envPath, previousContents);
 }
 
 export async function initCommand(
@@ -127,6 +224,8 @@ export async function initCommand(
     dependencies.dotenvxAdapter ?? new DefaultDotenvxAdapter();
   const fileExists = dependencies.fileExists ?? pathExists;
   const deleteFileImpl = dependencies.deleteFile ?? deleteFile;
+  const readTextFileImpl = dependencies.readTextFile ?? readTextFile;
+  const writeTextFileImpl = dependencies.writeTextFile ?? writeTextFile;
   const writeConfigImpl = dependencies.writeConfig ?? writeConfig;
 
   let resolvedInit;
@@ -149,6 +248,8 @@ export async function initCommand(
   }
 
   const envKeysPath = path.join(resolvedInit.projectRoot, ".env.keys");
+  const envPath = path.join(resolvedInit.projectRoot, ".env");
+  const hasExistingConfig = await fileExists(resolvedInit.configPath);
 
   let store: SecretStore;
 
@@ -168,9 +269,11 @@ export async function initCommand(
       resolvedInit.projectRoot,
       env,
       dotenvxAdapter,
+      !hasExistingConfig,
+      readTextFileImpl,
     );
   } catch {
-    stderr("Failed to read a local dotenvx key.");
+    stderr("Failed to prepare a dotenvx key.");
     if (await fileExists(envKeysPath)) {
       emitPreservedEnvKeysMessage(stderr, envKeysPath);
     }
@@ -178,20 +281,31 @@ export async function initCommand(
   }
 
   if (resolvedKey.privateKey === null) {
-    if (resolvedInit.source === "existing-config") {
+    if (hasExistingConfig) {
       stderr(`No key found for id: ${resolvedInit.id}`);
       stderr(
         "Provide DOTENV_PRIVATE_KEY or restore the key before running init again.",
       );
-    } else {
+    } else if (resolvedKey.requiresExistingKey) {
+      stderr("No reusable key was found for the existing encrypted .env.");
       stderr(
-        "No key source is available. Prepare a dotenvx key or provide DOTENV_PRIVATE_KEY first.",
+        "Provide DOTENV_PRIVATE_KEY or restore .env.keys before running init again.",
       );
+    } else {
+      stderr("Failed to bootstrap a new dotenvx key.");
     }
     return CLI_EXIT_CODE.notFound;
   }
 
   let storedByThisRun = false;
+  const shouldWriteBootstrapEnv =
+    resolvedKey.source === "bootstrap" &&
+    resolvedKey.encryptedEnvContents !== null;
+  const previousEnvContents = shouldWriteBootstrapEnv
+    ? await readOptionalTextFile(envPath, readTextFileImpl)
+    : null;
+  let envWriteAttempted = false;
+  let envRollbackFailed = false;
 
   if (resolvedKey.source !== "secret-store") {
     try {
@@ -209,10 +323,66 @@ export async function initCommand(
     }
   }
 
+  if (shouldWriteBootstrapEnv) {
+    envWriteAttempted = true;
+    const bootstrapEnvContents = resolvedKey.encryptedEnvContents;
+
+    if (bootstrapEnvContents === null) {
+      stderr("Failed to prepare a bootstrap .env file.");
+      return CLI_EXIT_CODE.infrastructure;
+    }
+
+    try {
+      await writeTextFileImpl(envPath, bootstrapEnvContents);
+    } catch {
+      try {
+        await restoreProjectEnv(
+          envPath,
+          previousEnvContents,
+          writeTextFileImpl,
+          deleteFileImpl,
+        );
+      } catch {
+        envRollbackFailed = true;
+      }
+
+      let rollbackFailed = false;
+
+      if (storedByThisRun) {
+        try {
+          await store.remove(resolvedInit.id);
+        } catch {
+          rollbackFailed = true;
+        }
+      }
+
+      stderr("Failed to update project env: .env");
+
+      if (rollbackFailed || envRollbackFailed) {
+        stderr("Manual project state verification is required.");
+      }
+
+      return CLI_EXIT_CODE.infrastructure;
+    }
+  }
+
   try {
     await writeConfigImpl(resolvedInit.projectRoot, resolvedInit.id);
   } catch {
     let rollbackFailed = false;
+
+    if (shouldWriteBootstrapEnv && envWriteAttempted) {
+      try {
+        await restoreProjectEnv(
+          envPath,
+          previousEnvContents,
+          writeTextFileImpl,
+          deleteFileImpl,
+        );
+      } catch {
+        envRollbackFailed = true;
+      }
+    }
 
     if (storedByThisRun) {
       try {
@@ -224,8 +394,8 @@ export async function initCommand(
 
     stderr(`Failed to write config: ${CONFIG_FILE_NAME}`);
 
-    if (rollbackFailed) {
-      stderr("Manual secret store verification is required.");
+    if (rollbackFailed || envRollbackFailed) {
+      stderr("Manual project state verification is required.");
     }
 
     if (

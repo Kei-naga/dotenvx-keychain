@@ -43,8 +43,14 @@ function createOutputCapture(): {
 
 function createDotenvxAdapter(
   readPrivateKey: (projectRoot: string) => Promise<string | null>,
+  bootstrapProjectEnv: DotenvxAdapter["bootstrapProjectEnv"] = async () => {
+    throw new Error("bootstrapProjectEnv is not configured for this test");
+  },
 ): DotenvxAdapter {
-  return { readPrivateKey };
+  return {
+    readPrivateKey,
+    bootstrapProjectEnv,
+  };
 }
 
 function createMissingFileError(): NodeJS.ErrnoException {
@@ -154,6 +160,126 @@ describe("initCommand", () => {
       readFile(path.join(directory, CONFIG_FILE_NAME), "utf8"),
     ).resolves.toBe('{\n  "id": "app-a"\n}\n');
     await expect(readFile(envKeysPath, "utf8")).rejects.toBeTruthy();
+  });
+
+  it("bootstraps a new project when no key source is available", async () => {
+    const directory = await createTempDirectory();
+    const envPath = path.join(directory, ".env");
+    const store = new MockSecretStore();
+    const output = createOutputCapture();
+
+    const exitCode = await initCommand(
+      { id: "app-a" },
+      {
+        cwd: directory,
+        stdout: output.emitStdout,
+        stderr: output.emitStderr,
+        secretStoreFactory: {
+          create: async () => store,
+        },
+        dotenvxAdapter: createDotenvxAdapter(
+          async () => null,
+          async () => ({
+            privateKey: "generated-private-key",
+            encryptedEnvContents:
+              'DOTENV_PUBLIC_KEY="public"\nHELLO=encrypted:value\n',
+          }),
+        ),
+      },
+    );
+
+    expect(exitCode).toBe(0);
+    await expect(store.get("app-a")).resolves.toBe("generated-private-key");
+    await expect(readFile(envPath, "utf8")).resolves.toContain(
+      "HELLO=encrypted:value",
+    );
+    expect(output.stderr).toEqual([]);
+    expect([...output.stdout, ...output.stderr].join("\n")).not.toContain(
+      "generated-private-key",
+    );
+  });
+
+  it("restores the original .env when bootstrap succeeds but config writing fails", async () => {
+    const directory = await createTempDirectory();
+    const envPath = path.join(directory, ".env");
+    const store = new MockSecretStore();
+    const output = createOutputCapture();
+
+    await writeFile(envPath, "HELLO=world\n", "utf8");
+
+    const exitCode = await initCommand(
+      { id: "app-a" },
+      {
+        cwd: directory,
+        stdout: output.emitStdout,
+        stderr: output.emitStderr,
+        secretStoreFactory: {
+          create: async () => store,
+        },
+        dotenvxAdapter: createDotenvxAdapter(
+          async () => null,
+          async () => ({
+            privateKey: "generated-private-key",
+            encryptedEnvContents:
+              'DOTENV_PUBLIC_KEY="public"\nHELLO=encrypted:value\n',
+          }),
+        ),
+        writeConfig: async () => {
+          throw new Error("write failed");
+        },
+      },
+    );
+
+    expect(exitCode).toBe(4);
+    await expect(store.get("app-a")).resolves.toBeNull();
+    await expect(readFile(envPath, "utf8")).resolves.toBe("HELLO=world\n");
+    expect(output.stderr).toContain(
+      "Failed to write config: .dotenvx-keychain",
+    );
+  });
+
+  it("does not bootstrap an encrypted .env when no key source is available", async () => {
+    const directory = await createTempDirectory();
+    const envPath = path.join(directory, ".env");
+    const store = new MockSecretStore();
+    const output = createOutputCapture();
+    let bootstrapCalls = 0;
+
+    await writeFile(
+      envPath,
+      'DOTENV_PUBLIC_KEY="public"\nHELLO=encrypted:value\n',
+      "utf8",
+    );
+
+    const exitCode = await initCommand(
+      { id: "app-a" },
+      {
+        cwd: directory,
+        stdout: output.emitStdout,
+        stderr: output.emitStderr,
+        secretStoreFactory: {
+          create: async () => store,
+        },
+        dotenvxAdapter: createDotenvxAdapter(async () => null, async () => {
+          bootstrapCalls += 1;
+          return {
+            privateKey: "generated-private-key",
+            encryptedEnvContents:
+              'DOTENV_PUBLIC_KEY="public"\nHELLO=encrypted:new-value\n',
+          };
+        }),
+      },
+    );
+
+    expect(exitCode).toBe(3);
+    expect(bootstrapCalls).toBe(0);
+    expect(output.stderr).toEqual([
+      "No reusable key was found for the existing encrypted .env.",
+      "Provide DOTENV_PRIVATE_KEY or restore .env.keys before running init again.",
+    ]);
+    await expect(readFile(envPath, "utf8")).resolves.toBe(
+      'DOTENV_PUBLIC_KEY="public"\nHELLO=encrypted:value\n',
+    );
   });
 
   it("rolls back the stored key when config writing fails", async () => {
