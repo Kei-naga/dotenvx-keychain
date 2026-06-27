@@ -44,6 +44,16 @@ function createMockRunner(
   };
 }
 
+function decodeEncodedCommand(args: string[]): string {
+  const encodedCommandIndex = args.indexOf("-EncodedCommand");
+
+  expect(encodedCommandIndex).toBeGreaterThanOrEqual(0);
+
+  return Buffer.from(args[encodedCommandIndex + 1] ?? "", "base64").toString(
+    "utf16le",
+  );
+}
+
 describe("WslWindowsKeytar", () => {
   it("maps CRUD operations through the Windows credential bridge", async () => {
     const credentials = new Map<string, string>();
@@ -103,6 +113,32 @@ describe("WslWindowsKeytar", () => {
 
     expect(runner.calls[0]?.file).toBe("powershell.exe");
     expect(runner.calls[0]?.args).toContain("-EncodedCommand");
+  });
+
+  it("scopes credential enumeration to the exact service namespace", async () => {
+    const runner = createMockRunner(() => ({
+      stdout: JSON.stringify({ credentials: [] }),
+    }));
+
+    const keytar = await createWslWindowsKeytar({
+      runPowerShell: runner.runPowerShell,
+    });
+
+    await expect(keytar.findCredentials("dotenvx-keychain")).resolves.toEqual(
+      [],
+    );
+
+    const bridgeCommand = decodeEncodedCommand(runner.calls[0]?.args ?? []);
+
+    expect(bridgeCommand).toContain(
+      'if (!CredEnumerate(targetPrefix + "*", 0, out count, out credentialsPtr))',
+    );
+    expect(bridgeCommand).toContain(
+      "credential.TargetName.StartsWith(targetPrefix, StringComparison.Ordinal)",
+    );
+    expect(bridgeCommand).not.toContain(
+      'if (!CredEnumerate(service + "*", 0, out count, out credentialsPtr))',
+    );
   });
 
   it("normalizes process failures into credential-manager errors", async () => {

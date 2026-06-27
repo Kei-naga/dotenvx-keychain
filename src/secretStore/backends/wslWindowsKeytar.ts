@@ -105,6 +105,10 @@ public static class DxkCredentialBridge {
     return service + "/" + account;
   }
 
+  private static string MakeTargetPrefix(string service) {
+    return service + "/";
+  }
+
   public static void SetPassword(string service, string account, string password) {
     byte[] blob = Encoding.UTF8.GetBytes(password);
     IntPtr blobPtr = Marshal.AllocCoTaskMem(blob.Length);
@@ -173,10 +177,11 @@ public static class DxkCredentialBridge {
   }
 
   public static CredentialEntry[] FindCredentials(string service) {
+    string targetPrefix = MakeTargetPrefix(service);
     UInt32 count;
     IntPtr credentialsPtr;
 
-    if (!CredEnumerate(service + "*", 0, out count, out credentialsPtr)) {
+    if (!CredEnumerate(targetPrefix + "*", 0, out count, out credentialsPtr)) {
       Int32 errorCode = Marshal.GetLastWin32Error();
 
       if (errorCode == ERROR_NOT_FOUND) {
@@ -192,6 +197,10 @@ public static class DxkCredentialBridge {
       for (Int32 index = 0; index < count; index++) {
         IntPtr credentialPtr = Marshal.ReadIntPtr(credentialsPtr, index * IntPtr.Size);
         CREDENTIAL credential = (CREDENTIAL)Marshal.PtrToStructure(credentialPtr, typeof(CREDENTIAL));
+
+        if (credential.TargetName == null || !credential.TargetName.StartsWith(targetPrefix, StringComparison.Ordinal)) {
+          continue;
+        }
 
         if (credential.UserName == null) {
           continue;
