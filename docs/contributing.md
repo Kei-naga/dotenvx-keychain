@@ -1,8 +1,11 @@
 # Contributing
 
-This document defines the Git and GitHub workflow for `dotenvx-keychain`.
-Behavior is defined in [spec.md](./spec.md). Update this document and the
-GitHub rulesets together when the workflow changes.
+This document defines the Git and GitHub workflow and maintainer validation
+workflow for `dotenvx-keychain`.
+
+The public end-user guide lives in [README.md](../README.md). Behavior is
+defined in [spec.md](./spec.md). Update this document and the GitHub rulesets
+together when the workflow changes.
 
 ## Branches
 
@@ -48,6 +51,50 @@ maintenance. Raise them when multiple maintainers are active.
 Required status checks should use the CI job checks currently emitted by
 [`CI`](../.github/workflows/ci.yml): `quality`, `test`, `package`, and
 `linux-real-store-smoke`.
+
+## Local Development And Validation
+
+Use this section for maintainer-facing verification. The public README should
+stay focused on install and runtime usage.
+
+### Command sequence
+
+From a fresh checkout, use this order:
+
+1. `npm install`
+2. `npm run lint`
+3. `npm run typecheck`
+4. `npm test`
+5. `npm run build`
+6. `node dist/index.js help`
+7. `npm run pack:dry-run`
+8. `npm run pack:smoke`
+9. `npm run test:real-store-smoke` when the change touches native-store behavior or you are preparing a release
+
+Notes:
+
+- `npm test` does not depend on `dist/`, so it can run before `npm run build`.
+- Run `npm run build` before direct repository execution such as `node dist/index.js help`.
+- Run `npm run build` before `npm run pack:dry-run`; that script does not build for you.
+- `npm run pack:smoke` already performs its own build.
+
+### Choosing the right smoke test
+
+- `npm run test:real-store-smoke`: default runtime-path smoke for macOS, Windows, native Linux, and ambient WSL.
+- `npm run test:real-store-smoke:wsl`: use only when you want to force the Linux Secret Service backend inside an isolated WSL session for comparison or diagnostics.
+- `npm run test:real-store-smoke:linux`: CI-style Linux helper that provisions an isolated Secret Service session on Linux.
+
+Platform notes:
+
+- On macOS, run `npm run test:real-store-smoke` from a normal logged-in user session with the login keychain unlocked.
+- On native Linux, `npm run test:real-store-smoke` depends on `libsecret-1.so.0` plus a usable Secret Service session.
+- On WSL, use a Linux-native Node.js and npm toolchain. If `command -v npm` points to `/mnt/c/...`, fix the toolchain before repo scripts.
+- For Linux and WSL prerequisites, troubleshooting, and the forced-Linux diagnostic flow, see [linux-secret-service.md](./linux-secret-service.md).
+
+### Release-oriented local checks
+
+- `npm run release:prepare -- <version>` expects a clean working tree, reruns the local release-candidate gate, reruns `npm run test:real-store-smoke` on the current machine, and prints the next `main` / tag / publish steps.
+- Treat `npm run test:real-store-smoke` as a release-preflight check in addition to CI, especially for native keychain behavior on macOS and Windows.
 
 ## Testing Policy
 
