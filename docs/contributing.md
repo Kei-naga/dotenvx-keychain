@@ -132,6 +132,19 @@ flow, refer to [linux-secret-service.md](./linux-secret-service.md).
   native-store smoke gate before tagging a release from the merged `main`
   commit
 
+## First Public Release Checklist
+
+- confirm that public docs still match the shipped `init` bootstrap contract
+- on the release candidate, run `npm run format:check`, `npm run lint`,
+  `npm run typecheck`, `npm test`, `npm run build`, `npm run pack:dry-run`,
+  and `npm run pack:smoke`
+- use `npm run release:prepare -- <version>` when you want one clean entry
+  point for that local gate plus the release-machine `npm run test:real-store-smoke`
+- rerun `npm run test:real-store-smoke` on the release machine before publish
+- keep manual win32 / darwin native-store sign-off until CI coverage exists
+- create the SemVer tag from the merged `main` commit only after that sign-off
+- verify the `release-prep` artifacts, then run the manual `npm publish`
+
 ## Not Enforced Yet
 
 - Limit PRs into `main` to `develop`, `release/*`, and `hotfix/*`.

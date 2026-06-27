@@ -56,7 +56,7 @@
 - This is a thin wrapper, not a replacement for `dotenvx`. Do not add global `dotenvx` assumptions; the CLI must resolve the bundled dependency and work from the published tarball.
 - `run` short-circuits if `DOTENV_PRIVATE_KEY` is already present in the parent environment. In that path it should not read config or the secret store.
 - `run` searches upward for the nearest `.dotenvx-keychain`. If none exists, it falls back to an auto-generated ID derived from the current real path.
-- `init` does not generate new keys in v1. It can only reuse an existing store value, a non-empty parent `DOTENV_PRIVATE_KEY`, or a locally readable `.env` / `.env.keys` key via bundled `dotenvx`.
+- `init` reuses an existing store value, a non-empty parent `DOTENV_PRIVATE_KEY`, or a locally readable `dotenvx` key first. When no reusable key exists and neither a local config nor an encrypted `.env` is already present, it may bootstrap the first encrypted `.env` in an isolated temp directory.
 - Successful `init` should leave `.env.keys` absent from the project root.
 - Exit codes are stable and tested: `0` success, `2` usage or input error, `3` key not found, `4` infrastructure or dependency failure, `5` post-processing cleanup failure.
 - `keytar` is a native dependency. Linux support depends on a working Secret Service environment; unsupported platforms must fail rather than fall back to plaintext.
