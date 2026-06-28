@@ -1,137 +1,223 @@
 # dotenvx-keychain
 
-`dotenvx-keychain` is a CLI wrapper around `dotenvx` that stores `DOTENV_PRIVATE_KEY`
-in native OS secret stores instead of keeping plaintext key material in the working
-tree.
+`dotenvx-keychain` is a thin CLI wrapper around `dotenvx` for local development.
+It keeps `DOTENV_PRIVATE_KEY` out of your working tree by storing it in the
+native OS secret store and injecting it only into the command you run.
 
-Behavior, design, and release workflow documents live under `docs/`.
+Use it when you want encrypted `.env` files from `dotenvx` without leaving
+`.env.keys` in a repository that local tools or coding agents can read.
 
 ## Quick Start
 
-This project targets Node.js 20 or newer.
+Node.js 20 or newer is required.
 
-If you are using WSL, use a Linux-native Node.js and npm toolchain inside WSL.
-If `command -v npm` points to `/mnt/c/...`, you are using Windows npm and this
-repository may fail before its scripts run.
-
-Install dependencies:
+Use the published package directly:
 
 ```bash
-npm install
+npx dotenvx-keychain init
+npx dotenvx-keychain set HELLO world
+npx dotenvx-keychain get HELLO
+npx dotenvx-keychain run -- node app.js
 ```
 
-Initialize a project key reference:
+Or add it to your project and use the shorter `dxk` binary:
 
 ```bash
+npm install --save-dev dotenvx-keychain
 npx dxk init
-```
-
-On a fresh project, `init` can bootstrap the first encrypted `.env` and store the
-generated `DOTENV_PRIVATE_KEY` in the native OS secret store. If the project
-already has an encrypted `.env` or an existing `.dotenvx-keychain`, `init` will
-reuse the existing key relationship and will not silently rotate to a new key.
-
-Run a command through bundled `dotenvx` with the stored key:
-
-```bash
+npx dxk set HELLO world
+npx dxk get HELLO
 npx dxk run -- node app.js
 ```
 
-List or remove stored IDs:
+Use a custom shared ID when you want multiple checkouts or teammates to target
+the same stored key:
 
 ```bash
+npx dotenvx-keychain init my-app-v2
+```
+
+No separate global `dotenvx` install is required. `dotenvx-keychain` runs the
+bundled `dotenvx` dependency for you.
+
+## Typical Workflows
+
+### Start a new project
+
+1. Run `init` in the project root.
+2. Let `init` create or connect `.dotenvx-keychain` and store the private key in your OS secret store.
+3. Start your app or script with `run`.
+4. Commit `.dotenvx-keychain` and your encrypted `.env`, but do not commit `.env.keys`.
+
+Example:
+
+```bash
+npx dotenvx-keychain init
+npx dotenvx-keychain run -- npm run dev
+```
+
+### Join an existing project
+
+1. Clone the project and keep the committed `.dotenvx-keychain` file.
+2. Receive the current `DOTENV_PRIVATE_KEY` through an approved channel, or make sure it already exists in your local secret store.
+3. Run `init` in the project so the local machine is connected to the existing key relationship.
+4. Start the app with `run`.
+
+Example:
+
+```bash
+export DOTENV_PRIVATE_KEY='...'
+npx dotenvx-keychain init
+npx dotenvx-keychain run -- node app.js
+```
+
+For an existing encrypted project, `init` reuses the current key relationship.
+It does not silently generate a different key and overwrite the project setup.
+
+## Commands
+
+### `init [id]`
+
+Use `init` to connect a project to a stored `DOTENV_PRIVATE_KEY`.
+
+- Without an argument, `init` creates `.dotenvx-keychain` with an auto-generated project ID.
+- With an explicit ID, `init` uses that shared ID instead.
+- On a new project, `init` can bootstrap the first encrypted `.env` and move the generated key into the native secret store.
+- On an existing project, `init` reuses the current key relationship instead of silently rotating to a new key.
+- If you are joining an existing project, `init` expects the current key to come from your local secret store, the parent `DOTENV_PRIVATE_KEY`, or an existing `.env.keys` file.
+
+Examples:
+
+```bash
+npx dotenvx-keychain init
+npx dotenvx-keychain init my-app-v2
+```
+
+### `run -- <command> [args...]`
+
+Use `run` when you want to start an app, script, or tool with the stored
+`DOTENV_PRIVATE_KEY` available only to that child process.
+
+- `run` resolves the project ID from `.dotenvx-keychain` and executes bundled `dotenvx run -- <command>`.
+- `run` searches upward from the current directory and uses the nearest `.dotenvx-keychain`, so it also works from project subdirectories.
+- You can use it for local app startup, scripts, tests, or any other command that needs dotenvx decryption.
+- If `DOTENV_PRIVATE_KEY` is already set in the parent environment, `run` uses that value and skips local config and secret-store lookup.
+
+Examples:
+
+```bash
+npx dotenvx-keychain run -- node app.js
+npx dotenvx-keychain run -- npm run dev
+npx dxk run -- vitest
+```
+
+### `set <key> <value>`
+
+Use `set` when you want to update a single encrypted `.env` value through the
+bundled `dotenvx set` command.
+
+- `set` accepts exactly two positional arguments: a key and a value.
+- `set` searches upward from the current directory, resolves the nearest `.dotenvx-keychain`, and runs from that project root because it modifies project files.
+- If `DOTENV_PRIVATE_KEY` is already set in the parent environment, `set` still resolves the project root but skips local secret-store lookup.
+- v1 provides no command alias, JSON mode, or quiet mode for `set`.
+
+Examples:
+
+```bash
+npx dotenvx-keychain set HELLO world
+npx dxk set API_URL https://example.test
+```
+
+### `get <key>`
+
+Use `get` when you want to print a single decrypted `.env` value through the
+bundled `dotenvx get` command.
+
+- `get` accepts exactly one positional argument.
+- `get` resolves the project root the same way as `set` and executes from that resolved root.
+- If `DOTENV_PRIVATE_KEY` is already set in the parent environment, `get` still resolves the project root but skips local secret-store lookup.
+- `get` intentionally prints the requested value to stdout.
+- The wrapper never prints `DOTENV_PRIVATE_KEY`.
+
+> [!TIP]
+> If you use AI agents or editor tooling that can execute commands, consider adding `dotenvx-keychain get` and `dxk get` to that tool's blocked-command list or denylist, because `get` prints plaintext values and should be treated as a security-sensitive command.
+
+Examples:
+
+```bash
+npx dotenvx-keychain get HELLO
+npx dxk get API_URL
+```
+
+### `list` / `ls`
+
+Use `list` to see which project IDs are currently stored on this machine.
+This prints IDs only, never the secret value itself.
+It reflects the local secret store only.
+
+Example:
+
+```bash
+npx dotenvx-keychain list
 npx dxk ls
-npx dxk rm <id>
+```
+
+### `remove <id>` / `rm <id>`
+
+Use `remove` when an ID is no longer needed on the current machine, such as
+after renaming a project ID or cleaning up an old checkout.
+It removes the stored key entry only and does not edit `.dotenvx-keychain` or
+other project files.
+
+Example:
+
+```bash
+npx dotenvx-keychain remove my-app-v2
+npx dxk rm my-app-v2
 ```
 
 ## What Gets Stored
 
-- `.dotenvx-keychain` stores only the project `id`.
-- `DOTENV_PRIVATE_KEY` is stored in the native OS secret store.
-- `run` injects `DOTENV_PRIVATE_KEY` only into the spawned child process.
-- If `DOTENV_PRIVATE_KEY` is already set in the parent environment, `run` uses it and does not read the local config or secret store.
+- `.dotenvx-keychain` stores only the project ID and is safe to commit.
+- `DOTENV_PRIVATE_KEY` is stored only in the native OS secret store.
+- `run` injects `DOTENV_PRIVATE_KEY` into the spawned child process only.
+- `set` and `get` operate on encrypted `.env` contents through the bundled `dotenvx`; they do not create raw per-variable keychain entries.
+- `get` may print the requested decrypted value to stdout, but `DOTENV_PRIVATE_KEY` remains stored only in the native OS secret store and is never printed by the wrapper.
+- Successful `init` should not leave `.env.keys` in the project root.
 
-## Platform Notes
+## Platform Support
 
-- `win32`: uses the native Windows secret store through `keytar`. Real-store smoke has been verified in the current development environment.
-- `darwin`: uses the macOS login keychain through `keytar`. Real-store smoke has been verified in the current development environment. If the native secret store is unavailable, verify that you are running in a logged-in user session and that the login keychain is present and unlocked in Keychain Access.
-- `linux` on native Linux: requires `libsecret-1.so.0`, a working D-Bus session, and a Secret Service compatible environment. The CLI does not fall back to plaintext files or alternate stores when Secret Service is unavailable.
-- `linux` on WSL: uses the current Windows user session's Credential Manager through `powershell.exe` interop while still requiring a Linux-native Node.js and npm toolchain inside WSL.
+- `darwin`: uses the macOS login keychain.
+- `win32`: uses Windows Credential Manager.
+- native `linux`: requires `libsecret-1.so.0`, a working D-Bus session, and a Secret Service compatible store.
+- `linux` on WSL: uses the current Windows user session's Credential Manager through `powershell.exe` interop while still requiring Linux-native Node.js and npm inside WSL.
 - other platforms: unsupported and expected to fail explicitly.
 
-## Linux And WSL Requirements
-
-On WSL, the default runtime path uses Windows Credential Manager rather than Linux Secret Service. If the native secret store is unavailable on WSL, verify that `powershell.exe` is reachable from the Linux environment and that the current Windows user session can access Credential Manager.
-
-When Linux reports that the native secret store is unavailable, verify the following before retrying:
-
-- the `libsecret-1.so.0` runtime library is installed and loadable
-- a D-Bus session is available to the current login session
-- a Secret Service compatible keyring daemon is installed and running
-- the default collection is unlocked for the current user session
-
-On Ubuntu / Debian based environments, the verified package set was:
+On Ubuntu or Debian based Linux environments, the verified runtime package set
+was:
 
 ```bash
 sudo apt-get install -y libsecret-1-0 gnome-keyring libsecret-tools
 ```
 
-On headless native Linux sessions, installing `gnome-keyring` may still leave the default collection uninitialized.
+For Linux and WSL prerequisites, troubleshooting, and the forced-Linux WSL
+diagnostic flow, see:
 
-If `npm run test:real-store-smoke` fails with `Cannot create an item in a locked collection`, treat it as the same Secret Service prerequisite problem: the default collection exists but is still locked or not fully initialized for the current session.
+- <https://github.com/Kei-naga/dotenvx-keychain/blob/main/docs/linux-secret-service.md>
 
-If those requirements are not met, `init`, `run`, `list`, and `remove` should fail with exit code `4` instead of falling back to plaintext storage.
+## Troubleshooting
 
-For the full native Linux Secret Service flow and the optional forced-Linux diagnostic path on WSL, see [docs/linux-secret-service.md](./docs/linux-secret-service.md).
+- Key not found: if `run` or `init` says the key is missing for an existing project, get the current `DOTENV_PRIVATE_KEY` through your team's approved path, export it temporarily, and run `init` again.
+- Secret store unavailable: this tool does not fall back to plaintext files. On Linux or WSL, check the platform prerequisites above and the Linux / WSL guide.
+- WSL toolchain issues: use Linux-native `node` and `npm` inside WSL. If `command -v npm` points into `/mnt/c/...`, switch to the Linux toolchain before running `dotenvx-keychain`.
 
-## Exit Codes
+## CI And Production
 
-- `0`: success
-- `2`: usage or input error
-- `3`: key not found for the resolved ID
-- `4`: `dotenvx` or native secret store failure
-- `5`: security-sensitive post-processing failure such as `.env.keys` cleanup
+`dotenvx-keychain` is for local development. In CI and production, inject
+`DOTENV_PRIVATE_KEY` from your platform secret manager or environment instead of
+depending on a local OS secret store.
 
-## CI And Production Usage
-
-- Prefer pre-injecting `DOTENV_PRIVATE_KEY` in CI and production jobs.
-- Do not rely on the local OS secret store in ephemeral CI environments.
-- `dxk run -- ...` will honor a pre-injected `DOTENV_PRIVATE_KEY` and skip local config and store lookup.
-
-## Development
-
-Run the test suite:
-
-```bash
-npm test
-```
-
-Useful verification commands during development:
-
-```bash
-npm run typecheck
-npm run build
-npm run pack:smoke
-npm run test:real-store-smoke
-npm run test:real-store-smoke:wsl
-npm run release:prepare -- 0.1.0
-```
-
-`npm run release:prepare -- <version>` expects a clean working tree, reruns the
-local release-candidate gate, reruns `npm run test:real-store-smoke` on the
-current machine, and prints the next `main` / tag / publish steps.
-
-Command selection:
-
-- `npm run test:real-store-smoke`: use for the default runtime path on macOS, Windows, native Linux, and ambient WSL.
-- `npm run test:real-store-smoke:wsl`: use only when you want to force the native Linux Secret Service path inside an isolated WSL session for diagnostics.
-
-On macOS, run `npm run test:real-store-smoke` from a normal logged-in user session with the login keychain unlocked so `keytar` can reach the native keychain APIs.
-
-`npm run test:real-store-smoke` is treated as a release-preflight check rather than a required check on every pull request, because native keychain availability is runner-dependent, especially on Linux.
-
-On native Linux, `npm run test:real-store-smoke` depends on `libsecret-1.so.0` being present in addition to a usable Secret Service session. On WSL, the default path depends on `powershell.exe` interop and Windows Credential Manager. When those prerequisites are missing, the built CLI should fail with exit code `4` and print recovery guidance instead of exposing backend internals or falling back to plaintext storage.
-
-One verified native-Linux diagnostic path on Ubuntu 24.04.1 WSL2 used an isolated `dbus-run-session` plus `gnome-keyring-daemon --login` and `gnome-keyring-daemon --start --components=secrets` before running `npm run test:real-store-smoke:wsl`.
-
-For WSL specifically, the repository also provides `npm run test:real-store-smoke:wsl`, which forces the Linux Secret Service backend inside that isolated session for comparison and troubleshooting.
+If `DOTENV_PRIVATE_KEY` is already present, `run` will honor it and skip local
+config and secret-store lookup. `set` and `get` will honor it for key
+resolution while still resolving the nearest project root before they touch
+project files.

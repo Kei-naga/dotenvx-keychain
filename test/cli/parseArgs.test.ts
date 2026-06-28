@@ -62,6 +62,25 @@ describe("parseCliArgs", () => {
     });
   });
 
+  it("parses set and get commands with their minimal positional arguments", () => {
+    expect(parseCliArgs(["set", "HELLO", "world"])).toEqual({
+      type: "command",
+      command: {
+        name: "set",
+        key: "HELLO",
+        value: "world",
+      },
+    });
+
+    expect(parseCliArgs(["get", "HELLO"])).toEqual({
+      type: "command",
+      command: {
+        name: "get",
+        key: "HELLO",
+      },
+    });
+  });
+
   it("rejects invalid argument counts for init, list, and remove", () => {
     expect(parseCliArgs(["init", "one", "two"])).toEqual({
       type: "usage-error",
@@ -76,6 +95,16 @@ describe("parseCliArgs", () => {
     expect(parseCliArgs(["remove"])).toEqual({
       type: "usage-error",
       message: "remove requires exactly one ID argument.",
+    });
+
+    expect(parseCliArgs(["set", "HELLO"])).toEqual({
+      type: "usage-error",
+      message: "set requires exactly `<key> <value>`.",
+    });
+
+    expect(parseCliArgs(["get", "HELLO", "extra"])).toEqual({
+      type: "usage-error",
+      message: "get requires exactly one key argument.",
     });
   });
 

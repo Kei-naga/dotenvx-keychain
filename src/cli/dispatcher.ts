@@ -1,5 +1,6 @@
 import { parseCliArgs } from "./parseArgs.js";
 import { CLI_EXIT_CODE } from "./exitCodes.js";
+import { getCommand, type GetCommandDependencies } from "../commands/get.js";
 import { initCommand, type InitCommandDependencies } from "../commands/init.js";
 import { listCommand, type ListCommandDependencies } from "../commands/list.js";
 import {
@@ -7,19 +8,24 @@ import {
   type RemoveCommandDependencies,
 } from "../commands/remove.js";
 import { runCommand, type RunCommandDependencies } from "../commands/run.js";
+import { setCommand, type SetCommandDependencies } from "../commands/set.js";
 
 export interface DispatchDependencies
   extends
     InitCommandDependencies,
     RunCommandDependencies,
     ListCommandDependencies,
-    RemoveCommandDependencies {}
+    RemoveCommandDependencies,
+    SetCommandDependencies,
+    GetCommandDependencies {}
 
 export function formatUsage(): string {
   return [
     "Usage:",
     "  dotenvx-keychain init [id]",
     "  dotenvx-keychain run -- <command> [args...]",
+    "  dotenvx-keychain set <key> <value>",
+    "  dotenvx-keychain get <key>",
     "  dotenvx-keychain list",
     "  dotenvx-keychain remove <id>",
     "",
@@ -62,5 +68,14 @@ export async function dispatch(
   if (parsed.command.name === "remove") {
     return removeCommand(parsed.command, dependencies);
   }
+
+  if (parsed.command.name === "set") {
+    return setCommand(parsed.command, dependencies);
+  }
+
+  if (parsed.command.name === "get") {
+    return getCommand(parsed.command, dependencies);
+  }
+
   return CLI_EXIT_CODE.infrastructure;
 }

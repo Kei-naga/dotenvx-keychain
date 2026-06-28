@@ -1,8 +1,11 @@
 # Contributing
 
-This document defines the Git and GitHub workflow for `dotenvx-keychain`.
-Behavior is defined in [spec.md](./spec.md). Update this document and the
-GitHub rulesets together when the workflow changes.
+This document defines the Git and GitHub workflow and maintainer validation
+workflow for `dotenvx-keychain`.
+
+The public end-user guide lives in [README.md](../README.md). Behavior is
+defined in [spec.md](./spec.md). Update this document and the GitHub rulesets
+together when the workflow changes.
 
 ## Branches
 
@@ -46,8 +49,53 @@ Approvals stay at `0` for now so the repository remains usable in solo
 maintenance. Raise them when multiple maintainers are active.
 
 Required status checks should use the CI job checks currently emitted by
-[`CI`](../.github/workflows/ci.yml): `quality`, `test`, `package`, and
-`linux-real-store-smoke`.
+[`CI`](../.github/workflows/ci.yml): `quality`, `test`, `package`,
+`linux-real-store-smoke`, `macos-real-store-smoke`, and
+`windows-real-store-smoke`.
+
+## Local Development And Validation
+
+Use this section for maintainer-facing verification. The public README should
+stay focused on install and runtime usage.
+
+### Command sequence
+
+From a fresh checkout, use this order:
+
+1. `npm install`
+2. `npm run lint`
+3. `npm run typecheck`
+4. `npm test`
+5. `npm run build`
+6. `node dist/index.js help`
+7. `npm run pack:dry-run`
+8. `npm run pack:smoke`
+9. `npm run test:real-store-smoke` when the change touches native-store behavior or you are preparing a release
+
+Notes:
+
+- `npm test` does not depend on `dist/`, so it can run before `npm run build`.
+- Run `npm run build` before direct repository execution such as `node dist/index.js help`.
+- Run `npm run build` before `npm run pack:dry-run`; that script does not build for you.
+- `npm run pack:smoke` already performs its own build.
+
+### Choosing the right smoke test
+
+- `npm run test:real-store-smoke`: default runtime-path smoke for macOS, Windows, native Linux, and ambient WSL.
+- `npm run test:real-store-smoke:wsl`: use only when you want to force the Linux Secret Service backend inside an isolated WSL session for comparison or diagnostics.
+- `npm run test:real-store-smoke:linux`: CI-style Linux helper that provisions an isolated Secret Service session on Linux.
+
+Platform notes:
+
+- On macOS, run `npm run test:real-store-smoke` from a normal logged-in user session with the login keychain unlocked.
+- On native Linux, `npm run test:real-store-smoke` depends on `libsecret-1.so.0` plus a usable Secret Service session.
+- On WSL, use a Linux-native Node.js and npm toolchain. If `command -v npm` points to `/mnt/c/...`, fix the toolchain before repo scripts.
+- For Linux and WSL prerequisites, troubleshooting, and the forced-Linux diagnostic flow, see [linux-secret-service.md](./linux-secret-service.md).
+
+### Release-oriented local checks
+
+- `npm run release:prepare -- <version>` expects a clean working tree, reruns the local release-candidate gate, reruns `npm run test:real-store-smoke` on the current machine, and prints the next `main` / tag / publish steps.
+- Treat `npm run test:real-store-smoke` as a release-preflight check in addition to CI, especially for native keychain behavior on macOS and Windows.
 
 ## Testing Policy
 
@@ -98,13 +146,13 @@ Current local baseline commands:
 
 ### Manual checks allowed at first
 
-- real macOS Keychain and Windows Credential Manager behavior can stay as
-  release-gated manual smoke tests until their CI coverage is ready
 - Linux Secret Service is exercised automatically on GitHub-hosted Ubuntu by
   provisioning `libsecret`, `gnome-keyring`, and an isolated D-Bus session
-- before publishing a tagged release, rerun `npm run test:real-store-smoke` on
-  the release machine and keep win32 / darwin native-store sign-off outside
-  GitHub-hosted runners for now
+- macOS Keychain and Windows Credential Manager are exercised automatically on
+  GitHub-hosted runners through `npm run test:real-store-smoke`
+- before publishing a tagged release, you may still rerun
+  `npm run test:real-store-smoke` on the release machine as a final
+  environment-specific check
 
 For Linux / WSL environment prerequisites and the verified Secret Service smoke
 flow, refer to [linux-secret-service.md](./linux-secret-service.md).
@@ -115,8 +163,9 @@ flow, refer to [linux-secret-service.md](./linux-secret-service.md).
   [spec.md](./spec.md)
 - secret values must never appear in snapshots, assertion messages, or failure
   output
-- keep the `quality`, `test`, `package`, and `linux-real-store-smoke` CI job
-  checks required on `develop` and `main`
+- keep the `quality`, `test`, `package`, `linux-real-store-smoke`,
+  `macos-real-store-smoke`, and `windows-real-store-smoke` CI job checks
+  required on `develop` and `main`
 
 ## GitHub Actions
 
@@ -124,13 +173,17 @@ flow, refer to [linux-secret-service.md](./linux-secret-service.md).
   requests into and pushes to `develop` and `main`
 - the CI workflow enforces `npm run format:check`, `npm run lint`,
   `npm run typecheck`, `npm test`, `npm run build`, `npm run pack:dry-run`,
-  `npm run pack:smoke`, and `npm run test:real-store-smoke:linux`
+  `npm run pack:smoke`, `npm run test:real-store-smoke:linux`, and
+  `npm run test:real-store-smoke` on GitHub-hosted macOS and Windows runners
 - [`.github/workflows/release-prep.yml`](../.github/workflows/release-prep.yml)
-  runs on SemVer tags and optional manual dispatch, reruns the CI gate plus
-  the Linux real-store smoke, and uploads a release tarball artifact
-- `release-prep` does not publish to npm; maintainers must complete the manual
-  native-store smoke gate before tagging a release from the merged `main`
-  commit
+  runs on SemVer tags and optional manual dispatch, reruns the Linux release
+  gate plus macOS and Windows native-store smoke, and uploads a release
+  tarball artifact only after all three OS validations succeed
+- after the first green run of the new hosted-runner jobs, update the GitHub
+  rulesets so `macos-real-store-smoke` and `windows-real-store-smoke` become
+  required on `develop` and `main`
+- `release-prep` does not publish to npm; maintainers still run the manual
+  `npm publish` step after verifying the artifacts
 
 ## First Public Release Checklist
 
@@ -141,15 +194,13 @@ flow, refer to [linux-secret-service.md](./linux-secret-service.md).
 - use `npm run release:prepare -- <version>` when you want one clean entry
   point for that local gate plus the release-machine `npm run test:real-store-smoke`
 - rerun `npm run test:real-store-smoke` on the release machine before publish
-- keep manual win32 / darwin native-store sign-off until CI coverage exists
-- create the SemVer tag from the merged `main` commit only after that sign-off
+- create the SemVer tag from the merged `main` commit only after the hosted-runner checks succeed
 - verify the `release-prep` artifacts, then run the manual `npm publish`
 
 ## Not Enforced Yet
 
 - Limit PRs into `main` to `develop`, `release/*`, and `hotfix/*`.
 - Require CODEOWNERS review.
-- Promote darwin / win32 real-store smoke into CI coverage.
 - Automate npm publish.
 
 ## Review This Strategy When
@@ -157,5 +208,4 @@ flow, refer to [linux-secret-service.md](./linux-secret-service.md).
 - more people are developing in parallel
 - `main` needs one or more required approvals
 - maintenance branches become necessary
-- darwin / win32 native-store smoke is stable enough for CI coverage
 - release preparation should draft GitHub Releases or publish to npm

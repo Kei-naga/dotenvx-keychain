@@ -22,11 +22,24 @@ export interface ParsedRemoveCommand {
   id: string;
 }
 
+export interface ParsedSetCommand {
+  name: "set";
+  key: string;
+  value: string;
+}
+
+export interface ParsedGetCommand {
+  name: "get";
+  key: string;
+}
+
 export type ParsedCommand =
   | ParsedInitCommand
   | ParsedRunCommand
   | ParsedListCommand
-  | ParsedRemoveCommand;
+  | ParsedRemoveCommand
+  | ParsedSetCommand
+  | ParsedGetCommand;
 
 export interface ParsedUsageError {
   type: "usage-error";
@@ -45,11 +58,13 @@ export type ParseCliArgsResult =
 
 function normalizeCommandName(
   commandName: string,
-): "init" | "run" | "list" | "remove" | null {
+): "init" | "run" | "list" | "remove" | "set" | "get" | null {
   switch (commandName) {
     case "init":
     case "run":
     case "list":
+    case "set":
+    case "get":
       return commandName;
     case "remove":
       return "remove";
@@ -171,6 +186,53 @@ export function parseCliArgs(argv: string[]): ParseCliArgsResult {
         command: {
           name: "remove",
           id: commandArgs[0],
+        },
+      };
+
+    case "set":
+      if (commandArgs.length !== 2) {
+        return {
+          type: "usage-error",
+          message: "set requires exactly `<key> <value>`.",
+        };
+      }
+
+      if (commandArgs[0] === undefined || commandArgs[1] === undefined) {
+        return {
+          type: "usage-error",
+          message: "set requires exactly `<key> <value>`.",
+        };
+      }
+
+      return {
+        type: "command",
+        command: {
+          name: "set",
+          key: commandArgs[0],
+          value: commandArgs[1],
+        },
+      };
+
+    case "get":
+      if (commandArgs.length !== 1) {
+        return {
+          type: "usage-error",
+          message: "get requires exactly one key argument.",
+        };
+      }
+
+      if (commandArgs[0] === undefined) {
+        return {
+          type: "usage-error",
+          message: "get requires exactly one key argument.",
+        };
+      }
+
+      return {
+        type: "command",
+        command: {
+          name: "get",
+          key: commandArgs[0],
         },
       };
   }
