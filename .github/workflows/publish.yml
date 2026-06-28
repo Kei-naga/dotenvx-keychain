@@ -62,14 +62,7 @@ jobs:
 
       - name: Publish tarball to npm
         shell: bash
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
-          if [[ -z "${NODE_AUTH_TOKEN:-}" ]]; then
-            echo 'Missing required GitHub secret: NPM_TOKEN.' >&2
-            exit 1
-          fi
-
           npm publish "./release-artifacts/${{ steps.metadata.outputs.tarball_name }}" --provenance
 
       - name: Record publish result
