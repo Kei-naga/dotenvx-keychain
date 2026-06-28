@@ -149,10 +149,7 @@ export async function resolvePrivateKey(
   try {
     store = await secretStoreFactory.create();
   } catch (error) {
-    return failure(
-      CLI_EXIT_CODE.infrastructure,
-      formatSecretStoreError(error),
-    );
+    return failure(CLI_EXIT_CODE.infrastructure, formatSecretStoreError(error));
   }
 
   try {
@@ -168,10 +165,7 @@ export async function resolvePrivateKey(
 
     return success(storedValue);
   } catch (error) {
-    return failure(
-      CLI_EXIT_CODE.infrastructure,
-      formatSecretStoreError(error),
-    );
+    return failure(CLI_EXIT_CODE.infrastructure, formatSecretStoreError(error));
   }
 }
 

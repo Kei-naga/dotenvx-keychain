@@ -1,7 +1,5 @@
 import { CLI_EXIT_CODE } from "../cli/exitCodes.js";
-import {
-  shouldUseWindowsShell,
-} from "../cli/processRunner.js";
+import { shouldUseWindowsShell } from "../cli/processRunner.js";
 import {
   emitCommandFailure,
   hasPreInjectedPrivateKey,
