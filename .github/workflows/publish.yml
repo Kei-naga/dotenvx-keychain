@@ -70,7 +70,7 @@ jobs:
             exit 1
           fi
 
-          npm publish "release-artifacts/${{ steps.metadata.outputs.tarball_name }}" --provenance
+          npm publish "./release-artifacts/${{ steps.metadata.outputs.tarball_name }}" --provenance
 
       - name: Record publish result
         run: |
