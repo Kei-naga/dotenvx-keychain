@@ -1,7 +1,7 @@
 {
   "name": "dotenvx-keychain",
   "version": "0.1.0",
-  "description": "CLI wrapper that stores DOTENV_PRIVATE_KEY in native OS secret stores for dotenvx projects.",
+  "description": "A thin, easy-to-adopt dotenvx wrapper that isolates decryption keys into your OS native secret store for local development.",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/Kei-naga/dotenvx-keychain.git"
@@ -15,7 +15,14 @@
     "dotenv",
     "keychain",
     "secrets",
-    "cli"
+    "cli",
+    "secret-management",
+    "encryption",
+    "ai-agents",
+    "ai-security",
+    "local-development",
+    "credential-manager",
+    "secret-service"
   ],
   "license": "MIT",
   "type": "module",
