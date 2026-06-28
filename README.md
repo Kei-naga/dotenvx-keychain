@@ -1,15 +1,36 @@
 # dotenvx-keychain
 
-`dotenvx-keychain` is a thin CLI wrapper around `dotenvx` for local development.
-It keeps `DOTENV_PRIVATE_KEY` out of your working tree by storing it in the
-native OS secret store and injecting it only into the command you run.
+`dotenvx-keychain` is a thin secret management CLI for `dotenvx` in local
+development. It keeps `DOTENV_PRIVATE_KEY` out of your working tree by storing
+it in the native OS secret store and injecting it only into the command you
+run.
 
-Use it when you want encrypted `.env` files from `dotenvx` without leaving
-`.env.keys` in a repository that local tools or coding agents can read.
+Use it when you want to keep the familiar `.env`-based developer experience
+from `dotenvx` while encrypting your env file without leaving `.env.keys` in a
+repository that local tools, AI coding agents, or editor automation can read.
+
+It is designed as a `dotenvx` companion for local workflows where you want the
+usual `.env` workflow to stay intact, but the decryption key to stay out of
+the project directory.
+
+The setup stays small: install it or call it with `npx`, run `init` once, and
+keep using the usual `dotenvx`-style `run`, `set`, and `get` flow.
+
+## Who This Is For
+
+- Teams that use `dotenvx` and want to keep encrypted `.env` files while
+  storing `DOTENV_PRIVATE_KEY` in the OS keychain instead of `.env.keys`.
+- Developers using AI coding agents or editor tooling that can scan repository
+  files and should not see local decryption keys.
+- Local development workflows that want native secret storage on macOS
+  Keychain, Windows Credential Manager, or Linux Secret Service.
 
 ## Quick Start
 
 Node.js 20 or newer is required.
+
+If you already use npm-based local tooling, the basic flow is: install or use
+`npx`, run `init` once, then keep working with `run`, `set`, and `get`.
 
 You can install `dotenvx-keychain` from npm:
 
@@ -41,6 +62,11 @@ No separate global `dotenvx` install is required. `dotenvx-keychain` runs the
 bundled `dotenvx` dependency for you.
 
 ## Typical Workflows
+
+These are the main `dotenvx-keychain` use cases for secure local development:
+bootstrap a new encrypted project and join an existing encrypted project
+without leaving `DOTENV_PRIVATE_KEY` in the working tree, while keeping the
+day-to-day CLI flow small.
 
 ### Start a new project
 
