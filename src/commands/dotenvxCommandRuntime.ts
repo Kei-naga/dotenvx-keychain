@@ -3,7 +3,11 @@ import {
   defaultRunInheritedProcess,
   type RunInheritedProcess,
 } from "../cli/processRunner.js";
-import { readConfig, ReadConfigError } from "../config/configFile.js";
+import {
+  readConfig,
+  ReadConfigError,
+  type ConfigFileData,
+} from "../config/configFile.js";
 import { createAutoIdFromRealPath } from "../config/id.js";
 import { resolveRunProject } from "../config/idResolver.js";
 import { resolveDotenvxBinary } from "../dotenvx/resolver.js";
@@ -106,12 +110,16 @@ export function hasPreInjectedPrivateKey(
 
 export async function resolveProjectContext(
   cwd: string,
+  dependencies: {
+    readConfig?: (configPath: string) => Promise<ConfigFileData>;
+  } = {},
 ): Promise<CommandResolutionResult<ResolvedProjectContext>> {
   const resolvedProject = await resolveRunProject(cwd);
+  const configReader = dependencies.readConfig ?? readConfig;
 
   if (resolvedProject.configPath !== null) {
     try {
-      const config = await readConfig(resolvedProject.configPath);
+      const config = await configReader(resolvedProject.configPath);
 
       return success({
         projectRoot: resolvedProject.projectRoot,
@@ -125,7 +133,10 @@ export async function resolveProjectContext(
         );
       }
 
-      throw error;
+      return failure(
+        CLI_EXIT_CODE.infrastructure,
+        `Failed to read config: ${resolvedProject.configPath}`,
+      );
     }
   }
 
