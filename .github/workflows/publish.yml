@@ -1,0 +1,84 @@
+name: Publish
+
+on:
+  workflow_run:
+    workflows:
+      - Release Prep
+    types:
+      - completed
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.workflow_run.id }}
+  cancel-in-progress: false
+
+permissions:
+  actions: read
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    name: publish
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' }}
+    timeout-minutes: 15
+    steps:
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          registry-url: https://registry.npmjs.org
+
+      - name: Download release artifacts
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ github.event.workflow_run.id }}
+          name: release-prep-${{ github.event.workflow_run.id }}
+          path: release-artifacts
+
+      - name: Resolve tarball metadata
+        id: metadata
+        shell: bash
+        run: |
+          if [[ ! -f release-artifacts/pack-output.json ]]; then
+            echo 'Missing release artifact metadata: pack-output.json.' >&2
+            exit 1
+          fi
+
+          tarball_name="$(node --input-type=module -e "import { readFileSync } from 'node:fs'; const output = JSON.parse(readFileSync('release-artifacts/pack-output.json', 'utf8')); if (!Array.isArray(output) || output.length !== 1 || typeof output[0]?.filename !== 'string') { throw new Error('Unexpected pack output'); } console.log(output[0].filename);")"
+
+          if [[ ! -f "release-artifacts/${tarball_name}" ]]; then
+            echo "Expected tarball release-artifacts/${tarball_name} was not found." >&2
+            exit 1
+          fi
+
+          package_version="$(node --input-type=module -e "const filename = process.argv[1]; const match = filename.match(/^(.*)-([0-9]+\.[0-9]+\.[0-9]+(?:[-+][A-Za-z0-9.-]+)?)\.tgz$/); if (!match) { throw new Error('Could not parse tarball filename'); } console.log(match[2]);" "$tarball_name")"
+
+          {
+            echo "tarball_name=$tarball_name"
+            echo "package_version=$package_version"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Publish tarball to npm
+        shell: bash
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          if [[ -z "${NODE_AUTH_TOKEN:-}" ]]; then
+            echo 'Missing required GitHub secret: NPM_TOKEN.' >&2
+            exit 1
+          fi
+
+          npm publish "release-artifacts/${{ steps.metadata.outputs.tarball_name }}" --provenance
+
+      - name: Record publish result
+        run: |
+          {
+            echo '## npm publish'
+            echo ''
+            echo "- Source workflow run: ${{ github.event.workflow_run.html_url }}"
+            echo "- Source ref: ${{ github.event.workflow_run.head_branch || github.event.workflow_run.head_sha }}"
+            echo "- Published version: ${{ steps.metadata.outputs.package_version }}"
+            echo "- Published tarball: ${{ steps.metadata.outputs.tarball_name }}"
+          } >> "$GITHUB_STEP_SUMMARY"
