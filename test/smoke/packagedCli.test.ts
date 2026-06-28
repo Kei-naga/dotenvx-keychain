@@ -1,4 +1,4 @@
-import { access, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { access, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { spawn } from "node:child_process";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -27,6 +27,27 @@ async function pathExists(filePath: string): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+function extractPrivateKey(envKeysContents: string): string {
+  const match = envKeysContents.match(
+    /^(?:export\s+)?DOTENV_PRIVATE_KEY=(.+)$/mu,
+  );
+
+  if (!match?.[1]) {
+    throw new Error("Failed to extract DOTENV_PRIVATE_KEY from .env.keys.");
+  }
+
+  const rawValue = match[1].trim();
+
+  if (
+    (rawValue.startsWith('"') && rawValue.endsWith('"')) ||
+    (rawValue.startsWith("'") && rawValue.endsWith("'"))
+  ) {
+    return rawValue.slice(1, -1);
+  }
+
+  return rawValue;
 }
 
 function getNpmExecPath(): string {
@@ -205,5 +226,52 @@ describe("packaged CLI smoke", () => {
     expect(aliasResult.exitCode).toBe(0);
     expect(aliasResult.signal).toBeNull();
     expect(aliasResult.stdout).toContain(smokeKey);
+
+    await writeFile(
+      path.join(installDirectory, ".env"),
+      "BASE=hello\n",
+      "utf8",
+    );
+
+    const encryptResult = await runInstalledBinary(
+      installDirectory,
+      "dotenvx",
+      ["encrypt"],
+      process.env,
+    );
+
+    expect(encryptResult.exitCode).toBe(0);
+    expect(encryptResult.signal).toBeNull();
+
+    const envKeysContents = await readFile(
+      path.join(installDirectory, ".env.keys"),
+      "utf8",
+    );
+    const encryptedProjectKey = extractPrivateKey(envKeysContents);
+    const encryptedProjectEnv = {
+      ...process.env,
+      DOTENV_PRIVATE_KEY: encryptedProjectKey,
+    };
+
+    const setResult = await runInstalledBinary(
+      installDirectory,
+      "dotenvx-keychain",
+      ["set", "HELLO", "world"],
+      encryptedProjectEnv,
+    );
+
+    expect(setResult.exitCode).toBe(0);
+    expect(setResult.signal).toBeNull();
+
+    const getResult = await runInstalledBinary(
+      installDirectory,
+      "dxk",
+      ["get", "HELLO"],
+      encryptedProjectEnv,
+    );
+
+    expect(getResult.exitCode).toBe(0);
+    expect(getResult.signal).toBeNull();
+    expect(getResult.stdout).toContain("world");
   }, 120_000);
 });

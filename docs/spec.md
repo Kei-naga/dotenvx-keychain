@@ -11,10 +11,10 @@
 
 This document defines the following scope.
 
-- The `init`, `run`, `list`, and `remove` commands of a CLI for local development environments
+- The `init`, `run`, `set`, `get`, `list`, and `remove` commands of a CLI for local development environments
 - The format and resolution rules for the `.dotenvx-keychain` config file
 - The persistence rules for storing values in the OS-native secret store
-- The behavior for injecting the key required when executing `dotenvx`
+- The behavior for injecting the key required when executing bundled `dotenvx` commands such as `run`, `set`, and `get`
 - An execution mode that prioritizes a pre-injected `DOTENV_PRIVATE_KEY`
 
 The following are out of scope.
@@ -32,9 +32,11 @@ The following are out of scope.
 - Each identifier maps to exactly one `DOTENV_PRIVATE_KEY` value.
 - `.dotenvx-keychain` does not contain secret material, so it may be committed to Git.
 - If `init` is run with no arguments and `.dotenvx-keychain` already exists in the same directory, it reuses that `id`.
-- `run` is allowed not only from the project root, but also from child directories under it.
+- `run`, `set`, and `get` are allowed not only from the project root, but also from child directories under it.
 - `run` uses an auto-derived ID from the current directory only when no config file can be found.
+- `set` and `get` operate on project files through bundled `dotenvx`, so they must resolve project context before key resolution.
 - If the parent process environment variable `DOTENV_PRIVATE_KEY` is set to a non-empty value when `run` executes, that value takes top priority and the OS store must not be consulted.
+- If the parent process environment variable `DOTENV_PRIVATE_KEY` is set to a non-empty value when `set` or `get` executes, that value takes top priority for key resolution, but project-root resolution and config validation still occur.
 - When initializing an existing project on a different terminal or machine, v1 does not automate shared-key distribution itself. The required key is assumed to be supplied through the existing OS store or the parent process `DOTENV_PRIVATE_KEY`.
 - If `init` reuses the `id` from an existing config file and no local key is available, it must not generate a new key automatically and must instead fail, requiring the existing key to be supplied.
 - The key sources that `init` may consume are: an existing OS store value for the resolved ID, the parent process `DOTENV_PRIVATE_KEY`, an existing local key that the bundled `dotenvx` can read, or an isolated bootstrap flow for a new project.
@@ -45,6 +47,7 @@ The following are out of scope.
 - Supported operating systems are limited to `darwin`, `win32`, and `linux`; all others must fail as unsupported platforms.
 - In v1, the only key format that can be stored and injected is `DOTENV_PRIVATE_KEY`.
 - In v1, CLI output is plain text for humans only; JSON output and quiet mode are not provided.
+- `get` may print the requested decrypted value to stdout, but the wrapper must never print `DOTENV_PRIVATE_KEY`.
 - Key import, export, and backup are future capabilities and are not provided in v1.
 - If the OS-native store is unavailable, the tool must not fall back to a plaintext file or alternate store.
 
@@ -137,9 +140,9 @@ For example, a directory named `my-app` would produce a format such as `my-app-1
 
 ## 7. Common Behavior
 
-### 7.1 Project Root Resolution During `run`
+### 7.1 Project Root Resolution During `run`, `set`, and `get`
 
-`run` searches upward from the current working directory and adopts the first `.dotenvx-keychain` it finds.
+`run`, `set`, and `get` search upward from the current working directory and adopt the first `.dotenvx-keychain` they find.
 
 - If found:
   The directory containing that file becomes the project root.
@@ -147,6 +150,10 @@ For example, a directory named `my-app` would produce a format such as `my-app-1
   Treat the current working directory as the project root.
 
 If config files exist at multiple ancestor levels, the nearest one takes priority.
+
+`run` uses this search only when no pre-injected key is present.
+`set` and `get` always use it because they execute bundled `dotenvx` against
+project files in the resolved project root.
 
 ### 7.2 Principles of Child Process Execution
 
@@ -190,7 +197,7 @@ If config files exist at multiple ancestor levels, the nearest one takes priorit
 
 - The CLI accepts `dotenvx-keychain` as the canonical executable name and `dxk` as the short executable name.
 - `list` accepts `ls` as an alias, and `remove` accepts `rm` as an alias.
-- `init` and `run` have no aliases.
+- `init`, `run`, `set`, and `get` have no aliases.
 - Canonical names and aliases can be mixed. For example, `dxk init`, `dotenvx-keychain ls`, and `dxk rm` are all valid.
 - Aliases are fully synonymous with their canonical names and must not change argument parsing, messages, exit codes, or security requirements.
 
@@ -206,6 +213,8 @@ If config files exist at multiple ancestor levels, the nearest one takes priorit
 
 - The key source priority for `run` is: pre-injected key, OS store, then error.
 - If a pre-injected key is present for `run`, skip the project-root search from [7.1](#71-project-root-resolution-during-run) and the OS store lookup, and pass that value directly to the child process.
+- The key source priority for `set` and `get` is: resolve project context, then pre-injected key, then OS store, then error.
+- Even if a pre-injected key is present for `set` or `get`, do not skip project-root search or config validation; only the OS store lookup may be skipped.
 - The key source priority for `init` is: existing OS store value, pre-injected key, existing local `.env.keys`, fresh bootstrap, then error.
 - However, if the `init` ID was determined by reusing an existing config file, and none of the OS store, pre-injected key, or local `.env.keys` contains a value, the command must fail as a missing-existing-key case.
 - Only when there is no existing config file and no reusable key may `init` execute the bundled `dotenvx` in an isolated temporary directory to generate a new `DOTENV_PRIVATE_KEY` and encrypted `.env`.
@@ -318,16 +327,72 @@ dxk run -- <command> [args...]
 - If the config file is malformed, exit with a syntax error.
 - If the command is used in CI/CD or production without a pre-injected key, exit with a message that instructs the user to inject secrets through the platform-standard mechanism.
 
-### 8.3 `list`
+### 8.3 `set`
 
 #### 8.3.1 Invocation
+
+```bash
+dotenvx-keychain set <key> <value>
+dxk set <key> <value>
+```
+
+- `set` accepts exactly two positional arguments.
+- `set` has no alias.
+
+#### 8.3.2 Execution Flow
+
+1. Resolve the project root according to [7.1](#71-project-root-resolution-during-run-set-and-get).
+2. If the parent process `DOTENV_PRIVATE_KEY` is non-empty, use that value. Otherwise, retrieve the secret key for the resolved ID from the OS store.
+3. Copy the current environment variables and set `DOTENV_PRIVATE_KEY` for the child process.
+4. Start `dotenvx set <key> <value>` in the resolved project root.
+5. Return the child process exit code or signal unchanged.
+
+#### 8.3.3 Failure Rules
+
+- If the config file is malformed, exit with a syntax error even when a pre-injected key exists.
+- If there is no pre-injected key and the key for the resolved ID cannot be found, exit with a message that instructs the user to rerun `init` or inject the key through an approved separate path.
+- If starting `dotenvx` fails, exit with a dependency error.
+- If the platform is unsupported, or the native store is unavailable while no pre-injected key exists, exit with an environment-prerequisite error.
+
+### 8.4 `get`
+
+#### 8.4.1 Invocation
+
+```bash
+dotenvx-keychain get <key>
+dxk get <key>
+```
+
+- `get` accepts exactly one positional argument.
+- `get` has no alias.
+
+#### 8.4.2 Execution Flow
+
+1. Resolve the project root according to [7.1](#71-project-root-resolution-during-run-set-and-get).
+2. If the parent process `DOTENV_PRIVATE_KEY` is non-empty, use that value. Otherwise, retrieve the secret key for the resolved ID from the OS store.
+3. Copy the current environment variables and set `DOTENV_PRIVATE_KEY` for the child process.
+4. Start `dotenvx get <key>` in the resolved project root.
+5. Return the child process exit code or signal unchanged.
+
+#### 8.4.3 Output and Failure Rules
+
+- `get` intentionally prints the requested decrypted value to stdout.
+- The wrapper itself must not print `DOTENV_PRIVATE_KEY` or add a success banner.
+- If the config file is malformed, exit with a syntax error even when a pre-injected key exists.
+- If there is no pre-injected key and the key for the resolved ID cannot be found, exit with a message that instructs the user to rerun `init` or inject the key through an approved separate path.
+- If starting `dotenvx` fails, exit with a dependency error.
+- If the platform is unsupported, or the native store is unavailable while no pre-injected key exists, exit with an environment-prerequisite error.
+
+### 8.5 `list`
+
+#### 8.5.1 Invocation
 
 ```bash
 dotenvx-keychain list
 dxk ls
 ```
 
-#### 8.3.2 Behavior
+#### 8.5.2 Behavior
 
 - Enumerate the IDs stored in the `dotenvx-keychain` namespace.
 - Write plain text to stdout, one ID per line.
@@ -336,16 +401,16 @@ dxk ls
 - Do not provide JSON output or quiet mode.
 - If there are zero entries, the command may exit with stdout left empty.
 
-### 8.4 `remove`
+### 8.6 `remove`
 
-#### 8.4.1 Invocation
+#### 8.6.1 Invocation
 
 ```bash
 dotenvx-keychain remove <id>
 dxk rm <id>
 ```
 
-#### 8.4.2 Behavior
+#### 8.6.2 Behavior
 
 - Delete only the entry that exactly matches the specified ID.
 - Do not modify project files such as `.dotenvx-keychain` or `.env`.
@@ -363,9 +428,10 @@ dxk rm <id>
 
 ## 10. Security Requirements
 
-- The key string must never appear in stdout, stderr, or logs.
+- `DOTENV_PRIVATE_KEY` must never appear in stdout, stderr, or logs.
+- `get` may print the requested decrypted value to stdout by design, but the wrapper must not print `DOTENV_PRIVATE_KEY`.
 - `list` must not output anything other than the IDs needed to confirm key presence.
-- `run` must limit environment-variable injection to the spawned child-process tree.
+- `run`, `set`, and `get` must limit environment-variable injection to the spawned child-process tree.
 - `init` must not leave key files in the working tree on completion.
 - Even when `init` generates or updates `.env` through fresh bootstrap, it must not capture unrelated values from the parent-process environment.
 - Secret values must not appear in exception messages or stack traces.
@@ -382,9 +448,12 @@ dxk rm <id>
 - In a new or existing directory, if `.env.keys` exists even though the local store has no key, `init` succeeds by storing the key from that file.
 - Running `run` from a child directory still resolves the ancestor directory's `.dotenvx-keychain`.
 - If `DOTENV_PRIVATE_KEY` is pre-set, running `run` can start the child process with that value even when `.dotenvx-keychain` or the local store cannot be consulted.
-- On each supported OS, macOS, Windows, and Linux, `init`, `run`, `list`, and `remove` behave under the same logical contract.
-- `dxk init`, `dxk run -- <command> [args...]`, `dxk ls`, and `dxk rm <id>` behave with the same exit codes and output contract as their canonical counterparts.
+- Running `set` from a child directory updates the encrypted `.env` in the nearest ancestor project root.
+- If `DOTENV_PRIVATE_KEY` is pre-set, running `get` still resolves the nearest project root and can print the requested value even when the local store is not consulted.
+- On each supported OS, macOS, Windows, and Linux, `init`, `run`, `set`, `get`, `list`, and `remove` behave under the same logical contract.
+- `dxk init`, `dxk run -- <command> [args...]`, `dxk set <key> <value>`, `dxk get <key>`, `dxk ls`, and `dxk rm <id>` behave with the same exit codes and output contract as their canonical counterparts.
 - If a tarball generated by `npm pack` is installed into a temporary environment, both `dotenvx-keychain` and `dxk` can start without a global `dotenvx`.
+- In that same packaged environment, `set` and `get` work through the bundled `dotenvx` dependency for an encrypted project without requiring a global `dotenvx`.
 - A tarball generated by `npm pack` includes the artifacts required for CLI execution, plus README and LICENSE.
 - Running `run` when no key exists ends non-zero and instructs the user to run `init`.
 - If Secret Service is unavailable on native Linux, or Windows Credential Manager integration is unavailable on WSL, the command ends non-zero without falling back to plaintext and reports the cause.

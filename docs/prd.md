@@ -22,7 +22,7 @@ The tool is also intended to be continuously maintainable as OSS and published o
 
 - The canonical CLI binary name is `dotenvx-keychain`, with an additional short alias `dxk`.
 - Command aliases are `list` = `ls` and `remove` = `rm`.
-- `init` and `run` are available only under their canonical names.
+- `init`, `run`, `set`, and `get` are available only under their canonical command names.
 - Aliases must preserve the same argument contract, exit codes, and output contract as the canonical commands.
 
 ### 1. Initialization Command: `init`
@@ -68,7 +68,23 @@ npx dotenvx-keychain run -- node index.js
 
 - **In-memory injection and execution:** Fetch the key associated with the resolved `id` from the keychain, place it into memory as environment variable `DOTENV_PRIVATE_KEY`, and execute `dotenvx run -- <command>` as a child process.
 
-### 3. Administrative Commands: `list` / `remove`
+### 3. Value Commands: `set` / `get`
+
+`set` and `get` are first-class project commands for updating and reading
+encrypted `.env` values through the bundled `dotenvx` dependency.
+They do not operate on raw keychain entries; the keychain is used only to
+resolve the shared `DOTENV_PRIVATE_KEY` when that key is not already present in
+the parent environment.
+
+- `set <KEY> <value>` writes one encrypted `.env` value through bundled `dotenvx set`.
+- `get <KEY>` prints one decrypted `.env` value through bundled `dotenvx get`.
+- Both commands search upward for the nearest `.dotenvx-keychain` and operate on that project's files.
+- If `DOTENV_PRIVATE_KEY` is already set, they skip only OS keychain lookup; project-root resolution and config validation still apply.
+- `get` intentionally prints the requested decrypted value to stdout.
+- The wrapper must never print `DOTENV_PRIVATE_KEY`.
+- v1 supports only positional syntax, with no command aliases, JSON output, or quiet mode.
+
+### 4. Administrative Commands: `list` / `remove`
 
 - **`list`:** Show the list of identifiers stored locally for this tool. Never display the actual key string.
 - **`remove <id>`:** Safely delete the key for an obsolete project from the keychain.
@@ -82,7 +98,7 @@ npx dotenvx-keychain run -- node index.js
 | Item | Requirement details |
 | --- | --- |
 | **Cross-platform** | Must support macOS (Keychain Access), Windows (Credential Manager), and Linux (Secret Service API / libsecret) through native OS integrations. |
-| **Security boundary** | Never expose the key string to stdout or stderr. Restrict environment variable injection to only the child process started by `run`, and do not contaminate the parent process or current shell. |
+| **Security boundary** | Never expose `DOTENV_PRIVATE_KEY` to stdout or stderr. `get` may print the requested decrypted env value to stdout by design. Restrict private-key injection to only the child process started by `run`, `set`, or `get`, and do not contaminate the parent process or current shell. |
 | **Performance** | As an extremely thin Node.js wrapper, keep the overhead from keychain lookup through process launch in the millisecond range. |
 | **Separation from CI/CD** | The tool is for local development only. In CI/CD systems such as GitHub Actions and in production, the tool should not intervene; existing flows should continue to inject `DOTENV_PRIVATE_KEY` directly from the platform-standard secret manager. |
 
