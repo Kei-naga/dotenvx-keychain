@@ -179,11 +179,18 @@ flow, refer to [linux-secret-service.md](./linux-secret-service.md).
   runs on SemVer tags and optional manual dispatch, reruns the Linux release
   gate plus macOS and Windows native-store smoke, and uploads a release
   tarball artifact only after all three OS validations succeed
+- on SemVer tag pushes, `release-prep` also validates that the tag matches
+  `package.json` and is cut from a commit reachable from `main`
+- on manual `workflow_dispatch`, `release-prep` still runs the same
+  validation and artifact steps but intentionally stops after artifact upload
+- [`.github/workflows/publish.yml`](../.github/workflows/publish.yml) runs only
+  after a successful tag-triggered `release-prep` run, downloads that run's
+  uploaded tarball artifact, and publishes the exact tarball to npm
 - after the first green run of the new hosted-runner jobs, update the GitHub
   rulesets so `macos-real-store-smoke` and `windows-real-store-smoke` become
   required on `develop` and `main`
-- `release-prep` does not publish to npm; maintainers still run the manual
-  `npm publish` step after verifying the artifacts
+- configure the repository `NPM_TOKEN` Actions secret with an npm automation
+  token before relying on tag-driven publish
 
 ## First Public Release Checklist
 
@@ -193,19 +200,21 @@ flow, refer to [linux-secret-service.md](./linux-secret-service.md).
   and `npm run pack:smoke`
 - use `npm run release:prepare -- <version>` when you want one clean entry
   point for that local gate plus the release-machine `npm run test:real-store-smoke`
-- rerun `npm run test:real-store-smoke` on the release machine before publish
+- rerun `npm run test:real-store-smoke` on the release machine before pushing the release tag when you want a final environment-specific check
 - create the SemVer tag from the merged `main` commit only after the hosted-runner checks succeed
-- verify the `release-prep` artifacts, then run the manual `npm publish`
+- verify the `release-prep` artifact upload and the downstream `Publish`
+  workflow result
+- use the manual `release-prep` workflow_dispatch path when you want a hosted
+  preflight rerun without triggering `Publish`
 
 ## Not Enforced Yet
 
 - Limit PRs into `main` to `develop`, `release/*`, and `hotfix/*`.
 - Require CODEOWNERS review.
-- Automate npm publish.
 
 ## Review This Strategy When
 
 - more people are developing in parallel
 - `main` needs one or more required approvals
 - maintenance branches become necessary
-- release preparation should draft GitHub Releases or publish to npm
+- release automation should draft GitHub Releases or add publish approval gates

@@ -14,9 +14,65 @@ permissions:
   contents: read
 
 jobs:
+  release-preflight:
+    name: release-preflight
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Resolve release context
+        id: context
+        shell: bash
+        run: |
+          package_version="$(node --input-type=module -e "import { readFileSync } from 'node:fs'; console.log(JSON.parse(readFileSync('package.json', 'utf8')).version)")"
+          release_tag="${GITHUB_REF_NAME:-manual}"
+
+          if [[ "${GITHUB_EVENT_NAME}" == "push" ]]; then
+            expected_tag="v${package_version}"
+
+            if [[ "$release_tag" != "$expected_tag" ]]; then
+              echo "Release tag $release_tag does not match package.json version $expected_tag." >&2
+              exit 1
+            fi
+
+            git fetch --no-tags origin main
+
+            if ! git merge-base --is-ancestor "$GITHUB_SHA" "origin/main"; then
+              echo "Tagged commit $GITHUB_SHA is not reachable from origin/main." >&2
+              exit 1
+            fi
+          fi
+
+          {
+            echo "release_tag=$release_tag"
+            echo "package_version=$package_version"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Record release context
+        run: |
+          {
+            echo '## Release context'
+            echo ''
+            echo "- Event: ${{ github.event_name }}"
+            echo "- Ref: ${{ github.ref }}"
+            echo "- Release tag: ${{ steps.context.outputs.release_tag }}"
+            echo "- package.json version: ${{ steps.context.outputs.package_version }}"
+            echo "- Downstream publish workflow eligible: ${{ github.event_name == 'push' }}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
   release-prep-linux:
     name: release-prep-linux
     runs-on: ubuntu-latest
+    needs:
+      - release-preflight
     timeout-minutes: 40
     steps:
       - name: Checkout repository
@@ -69,6 +125,8 @@ jobs:
   release-prep-macos:
     name: release-prep-macos
     runs-on: macos-latest
+    needs:
+      - release-preflight
     timeout-minutes: 25
     steps:
       - name: Checkout repository
@@ -90,6 +148,8 @@ jobs:
   release-prep-windows:
     name: release-prep-windows
     runs-on: windows-latest
+    needs:
+      - release-preflight
     timeout-minutes: 25
     steps:
       - name: Checkout repository
@@ -112,6 +172,7 @@ jobs:
     name: release-artifacts
     runs-on: ubuntu-latest
     needs:
+      - release-preflight
       - release-prep-linux
       - release-prep-macos
       - release-prep-windows
@@ -134,9 +195,13 @@ jobs:
         run: npm run build
 
       - name: Create release tarball
+        id: pack
+        shell: bash
         run: |
           rm -f ./*.tgz pack-output.json
           npm pack --json > pack-output.json
+          tarball_name="$(node --input-type=module -e "import { readFileSync } from 'node:fs'; const output = JSON.parse(readFileSync('pack-output.json', 'utf8')); console.log(output[0].filename);")"
+          echo "tarball_name=$tarball_name" >> "$GITHUB_OUTPUT"
 
       - name: Upload release artifacts
         uses: actions/upload-artifact@v4
@@ -153,6 +218,9 @@ jobs:
             echo '## Automated native-store gate'
             echo ''
             echo '- This workflow reruns native secret-store smoke on ubuntu-latest, macos-latest, and windows-latest before creating release artifacts.'
-            echo '- Before npm publish, you may still rerun `npm run test:real-store-smoke` on the release machine as a final environment-specific check.'
+            echo '- Manual workflow_dispatch runs stop after artifact creation and do not publish to npm.'
+            echo '- Successful tag-triggered runs hand this uploaded tarball artifact to the separate Publish workflow for npm publish.'
+            echo '- You may still rerun `npm run test:real-store-smoke` on the release machine as a final environment-specific check before pushing the release tag.'
             echo '- SemVer tags should be created from the merged `main` commit after these hosted-runner checks succeed.'
+            echo '- Packaged tarball: ${{ steps.pack.outputs.tarball_name }}'
           } >> "$GITHUB_STEP_SUMMARY"
