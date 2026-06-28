@@ -15,6 +15,8 @@ Use the published package directly:
 
 ```bash
 npx dotenvx-keychain init
+npx dotenvx-keychain set HELLO world
+npx dotenvx-keychain get HELLO
 npx dotenvx-keychain run -- node app.js
 ```
 
@@ -23,6 +25,8 @@ Or add it to your project and use the shorter `dxk` binary:
 ```bash
 npm install --save-dev dotenvx-keychain
 npx dxk init
+npx dxk set HELLO world
+npx dxk get HELLO
 npx dxk run -- node app.js
 ```
 
@@ -107,6 +111,44 @@ npx dotenvx-keychain run -- npm run dev
 npx dxk run -- vitest
 ```
 
+### `set <key> <value>`
+
+Use `set` when you want to update a single encrypted `.env` value through the
+bundled `dotenvx set` command.
+
+- `set` accepts exactly two positional arguments: a key and a value.
+- `set` searches upward from the current directory, resolves the nearest `.dotenvx-keychain`, and runs from that project root because it modifies project files.
+- If `DOTENV_PRIVATE_KEY` is already set in the parent environment, `set` still resolves the project root but skips local secret-store lookup.
+- v1 provides no command alias, JSON mode, or quiet mode for `set`.
+
+Examples:
+
+```bash
+npx dotenvx-keychain set HELLO world
+npx dxk set API_URL https://example.test
+```
+
+### `get <key>`
+
+Use `get` when you want to print a single decrypted `.env` value through the
+bundled `dotenvx get` command.
+
+- `get` accepts exactly one positional argument.
+- `get` resolves the project root the same way as `set` and executes from that resolved root.
+- If `DOTENV_PRIVATE_KEY` is already set in the parent environment, `get` still resolves the project root but skips local secret-store lookup.
+- `get` intentionally prints the requested value to stdout.
+- The wrapper never prints `DOTENV_PRIVATE_KEY`.
+
+> [!TIP]
+> If you use AI agents or editor tooling that can execute commands, consider adding `dotenvx-keychain get` and `dxk get` to that tool's blocked-command list or denylist, because `get` prints plaintext values and should be treated as a security-sensitive command.
+
+Examples:
+
+```bash
+npx dotenvx-keychain get HELLO
+npx dxk get API_URL
+```
+
 ### `list` / `ls`
 
 Use `list` to see which project IDs are currently stored on this machine.
@@ -139,6 +181,8 @@ npx dxk rm my-app-v2
 - `.dotenvx-keychain` stores only the project ID and is safe to commit.
 - `DOTENV_PRIVATE_KEY` is stored only in the native OS secret store.
 - `run` injects `DOTENV_PRIVATE_KEY` into the spawned child process only.
+- `set` and `get` operate on encrypted `.env` contents through the bundled `dotenvx`; they do not create raw per-variable keychain entries.
+- `get` may print the requested decrypted value to stdout, but `DOTENV_PRIVATE_KEY` remains stored only in the native OS secret store and is never printed by the wrapper.
 - Successful `init` should not leave `.env.keys` in the project root.
 
 ## Platform Support
@@ -174,4 +218,6 @@ diagnostic flow, see:
 depending on a local OS secret store.
 
 If `DOTENV_PRIVATE_KEY` is already present, `run` will honor it and skip local
-config and secret-store lookup.
+config and secret-store lookup. `set` and `get` will honor it for key
+resolution while still resolving the nearest project root before they touch
+project files.

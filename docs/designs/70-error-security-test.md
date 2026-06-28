@@ -23,21 +23,23 @@
 | --- | --- | --- |
 | `0` | 成功 | 全コマンド |
 | `2` | 使用法または入力値エラー | 引数不足、ID 不正 |
-| `3` | 指定 ID の鍵が見つからない | `run`、`remove` |
-| `4` | `dotenvx` または OS ストア連携の失敗 | `init`、`run`、`list`、`remove` |
+| `3` | 指定 ID の鍵が見つからない | `run`、`set`、`get`、`remove` |
+| `4` | `dotenvx` または OS ストア連携の失敗 | `init`、`run`、`set`、`get`、`list`、`remove` |
 | `5` | セキュリティ上の後処理失敗 | `init` の `.env.keys` 削除失敗 |
 
 運用方針:
 
 - 同一コマンド内で複数失敗が起きた場合は、
   より重大な後処理失敗を優先して返す。
-- 子プロセスが返した終了コードは `run` の成功経路ではそのまま返す。
+- 子プロセスが返した終了コードは `run`、`set`、`get` の成功経路ではそのまま返す。
 
 ## 4. エラー分類
 
 ### 4.1 入力エラー
 
 - 想定ケースは未知コマンド、`run` の子コマンド不足、
+  `set` の key/value 不足または余剰引数、
+  `get` の key 不足または余剰引数、
   `remove` の ID 不足、明示 ID の文字種不正とする。
 - 表示文面は「理由 + 使用法」の順で短く出す。
 - 再試行方法は 1 つだけ提示し、複数案内を並べない。
@@ -58,6 +60,8 @@
   環境要件エラーとして終了コード `4`。
 - 設定ファイル破損:
   構文またはスキーマ不正として終了コード `4`。
+- `set/get` は事前注入鍵があっても project root 解決と設定ファイル検証を行うため、
+  設定ファイル破損は事前注入鍵の有無に関係なく終了コード `4` とする。
 - 鍵未検出:
   ユーザー再設定可能エラーとして終了コード `3`。
 - bootstrap 失敗:
@@ -82,9 +86,10 @@
 
 ## 5. セキュリティ要件
 
-- 鍵文字列を標準出力、標準エラー、ログに出さない。
+- `DOTENV_PRIVATE_KEY` を標準出力、標準エラー、ログに出さない。
+- `get` だけは要求された復号済み値の stdout 出力を許容する。
 - 例外やスタックトレースへ秘密値を混入させない。
-- `run` の環境変数注入を子プロセス系統に限定する。
+- `run`、`set`、`get` の環境変数注入を子プロセス系統に限定する。
 - ワーキングツリーに鍵ファイルを残さない。
 
 追加要件:
@@ -110,8 +115,11 @@
 - 設定ファイル読込の `not-found` と `invalid-json` の分離
 - Windows シェル経由判定
 - メッセージ整形時の秘密値除外
+- `set/get` の nearest-root 解決
+- `DOTENV_PRIVATE_KEY` 事前注入時に store lookup だけを省略すること
 - 親環境、Secret Store、ローカル `dotenvx` 読み取りの各経路で、
   秘密値が stdout / stderr に出ないこと
+- `get` が要求された値を stdout に出しつつ、`DOTENV_PRIVATE_KEY` は出さないこと
 - `dotenvx keypair` が `null` を返した場合に、
   例外ではなく「鍵なし」として扱われること
 - 空プロジェクト bootstrap で placeholder が最終 `.env` に残らないこと
@@ -122,6 +130,7 @@
 
 - `init` 正常系
 - `run` 正常系
+- `set` / `get` 正常系
 - `list` の昇順出力
 - `remove` の完全一致削除
 
@@ -132,6 +141,8 @@
 - `init` で既存の平文 `.env` を暗号化済み `.env` へ置き換えられること
 - 暗号化済み `.env` が既にあるが鍵がない場合、`init` が新鍵を生成しないこと
 - `run` で設定ファイル未発見時の自動 ID フォールバック
+- `set/get` で最寄り project root が解決されること
+- `set/get` で事前注入鍵がある場合も project root 解決と設定ファイル検証を行うこと
 - `init` 失敗時の `.env.keys` 削除
 - `init` 失敗時の `.env` ロールバック
 - `remove` が設定ファイルを変更しないこと
@@ -139,6 +150,7 @@
   `dotenvx-keychain` と `dxk` が同じ CLI へ到達すること
 - 上記環境でグローバル `dotenvx` がなくても、
   同梱依存の解決に成功すること
+- 上記環境で暗号化済みプロジェクトに対する `set/get` が bundled `dotenvx` で完結すること
 
 ### 6.3 プラットフォーム観点
 
@@ -171,12 +183,14 @@
 - 実ストアを使うスモークテストは、
   `set/get/list/remove` の最小契約確認だけに絞って OS 別に分ける。
 - `npm pack` 後の tarball を一時ディレクトリへ導入し、
-  `dotenvx-keychain` と `dxk` の両方が起動することを
+  `dotenvx-keychain` と `dxk` の両方が起動し、
+  暗号化済みプロジェクトに対する `set/get` も bundled `dotenvx` で完結することを
   リリース前の必須スモークとする。
 - `npm run test:real-store-smoke` は、
   `darwin` / `linux` / `win32` の実ストア契約確認として維持するが、
   v1 では常時 PR CI の required gate には含めず、
   リリース前確認または専用ジョブに置く。
+- real-store smoke は secret-store 契約確認に集中し、`set/get` の end-to-end は packaged CLI smoke で担保する。
 - Linux の Secret Service 利用不可ケースは、
   自動化環境で安定再現できない場合に限り手動確認へ残してよい。
 - Linux の Secret Service 利用不可ケースでは、

@@ -37,6 +37,8 @@
 
 - `init [id]`
 - `run -- <command> [args...]`
+- `set <key> <value>`
+- `get <key>`
 - `list` (`ls`)
 - `remove <id>` (`rm`)
 
@@ -44,13 +46,15 @@
 バイナリ名を同一実装へ割り当てる。
 最初の位置引数はコマンド名として解釈し、
 `ls` と `rm` はそれぞれ `list` と `remove` へ正規化する。
-`init` と `run` は正規名のみを受け付ける。
+`init`、`run`、`set`、`get` は正規名のみを受け付ける。
 短縮形は正規名と同じ引数契約、メッセージ、終了コードを持つ。
 
 ### 3.3 使用法エラー
 
 - 未知コマンド
 - `run` の子コマンド未指定
+- `set` の key/value 未指定または余剰引数
+- `get` の key 未指定または余剰引数
 - `remove` の ID 未指定
 
 使用法エラーは次の共通規則を持つ。
@@ -102,7 +106,8 @@ type CommandHandler = (args: string[]) => Promise<number>;
 
 ## 4. `dotenvx` 依存解決
 
-`dotenvx` は本 CLI の同梱依存として解決する。
+`dotenvx` は本 CLI の同梱依存として解決し、`run` だけでなく
+`set` と `get` も bundled `dotenvx` へ委譲する。
 
 公開パッケージ前提:
 
@@ -167,14 +172,19 @@ type CommandHandler = (args: string[]) => Promise<number>;
 - シグナル終了なら親 CLI も同じシグナルで終了させる。
 - 起動前失敗は CLI 独自エラーとして終了コード `4` を返す。
 
-### 5.4 `dotenvx run` の組み立て
+### 5.4 `dotenvx` コマンドの組み立て
 
-`run` コマンドが起動する子プロセス列は次の形に固定する。
+`run`、`set`、`get` が起動する子プロセス列は次の形に固定する。
 
 ```text
 dotenvx run -- <command> [args...]
+dotenvx set <key> <value>
+dotenvx get <key>
 ```
 
+- `run` は現在の `cwd` で `dotenvx run -- <command> [args...]` を起動する。
+- `set` は `dotenvx set <key> <value>` を、`get` は `dotenvx get <key>` を、上方向探索で解決した project root を `cwd` にして起動する。
+- `set/get` は事前注入鍵があっても project root 解決と設定ファイル検証を省略しない。省略してよいのは secret-store lookup だけとする。
 - `dotenvx` 自体の追加オプションは v1 では注入しない。
 - ユーザー引数の再引用や 1 文字列連結は行わない。
 - 受け取った配列をそのまま子プロセス引数に変換する。
@@ -185,6 +195,7 @@ dotenvx run -- <command> [args...]
 - 使用法エラーと実行時エラーは標準エラーへ出す。
 - `run` の成功時は原則として本体メッセージを出さず、
   子プロセス出力だけを流す。
+- `get` は要求された値が子プロセス出力として stdout に出ることを許容するが、wrapper 自身は成功メッセージや `DOTENV_PRIVATE_KEY` を出力しない。
 - 秘密値、鍵文字列、完全な環境ダンプは出力しない。
 - 例外をログ化する場合も `DOTENV_PRIVATE_KEY` を必ず除外する。
 
