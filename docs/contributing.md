@@ -181,8 +181,10 @@ flow, refer to [linux-secret-service.md](./linux-secret-service.md).
   tarball artifact only after all three OS validations succeed
 - on SemVer tag pushes, `release-prep` also validates that the tag matches
   `package.json` and is cut from a commit reachable from `main`
-- on manual `workflow_dispatch`, `release-prep` still runs the same
-  validation and artifact steps but intentionally stops after artifact upload
+- on manual `workflow_dispatch`, `release-prep` still reruns the same
+  Linux/macOS/Windows validation jobs and artifact upload, but it skips the
+  tag-versus-`package.json` and reachable-from-`main` checks that only run on
+  SemVer tag pushes, then intentionally stops after artifact upload
 - [`.github/workflows/publish.yml`](../.github/workflows/publish.yml) runs only
   after a successful tag-triggered `release-prep` run, downloads that run's
   uploaded tarball artifact, and publishes the exact tarball to npm

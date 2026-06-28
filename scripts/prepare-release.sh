@@ -104,7 +104,7 @@ Next steps:
    git push origin $release_tag
 3. Wait for the Release Prep workflow to finish and confirm the uploaded tarball artifact is available.
 4. Confirm the follow-on Publish workflow succeeded for the same tag.
-5. If you want an extra dry run before tagging, use the manual Release Prep workflow_dispatch path; it preserves the validation and artifact steps but does not trigger Publish.
+5. If you want an extra dry run before tagging, use the manual Release Prep workflow_dispatch path; it reruns the hosted validation jobs and artifact upload, but the tag/version/mainline checks and follow-on Publish trigger only happen on tag pushes.
 EOF
 else
   cat <<EOF
@@ -119,6 +119,6 @@ Next steps:
    git push origin $release_tag
 3. Wait for the Release Prep workflow to finish and confirm the uploaded tarball artifact is available.
 4. Confirm the follow-on Publish workflow succeeded for the same tag.
-5. If you want an extra dry run before tagging, use the manual Release Prep workflow_dispatch path; it preserves the validation and artifact steps but does not trigger Publish.
+5. If you want an extra dry run before tagging, use the manual Release Prep workflow_dispatch path; it reruns the hosted validation jobs and artifact upload, but the tag/version/mainline checks and follow-on Publish trigger only happen on tag pushes.
 EOF
 fi
