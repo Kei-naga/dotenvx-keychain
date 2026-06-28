@@ -22,8 +22,14 @@
   `npm run test:real-store-smoke` による login keychain への
   `set/get/list/remove` 成功結果を確認済みである。
 - Linux / WSL の環境前提と確認手順は [linux-secret-service.md](../linux-secret-service.md) に集約した。
-- 残項目は、リリース候補ごとに通常 gate と native-store smoke を再実行し、
-  直前確認の記録を更新することである。
+- GitHub-hosted runner 上の `darwin` / `win32` real-store smoke を
+  [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml) と
+  [`.github/workflows/release-prep.yml`](../../.github/workflows/release-prep.yml)
+  に追加し、通常 CI と release-prep で全対応 OS の native-store 経路を
+  自動実行する構成へ移行中である。
+- 残項目は、追加した hosted-runner job の最初の green run を確認し、
+  branch ruleset の required checks を更新したうえで、
+  リリース候補ごとの直前確認記録を更新することである。
 
 ## 3. フェーズ別計画と進捗
 
@@ -159,19 +165,21 @@
 - `darwin` は 2026-06-27 時点で通過確認済みである。
 - `linux` は 2026-06-24 時点で unavailable path と、isolated D-Bus session での
   success path の両方を確認済みである。
-- 残りは、リリース候補に対して `npm run format:check`、`npm run lint`、
-  `npm run typecheck`、`npm test`、`npm run build`、`npm run pack:smoke` を実行し、
-  リリース作業を行う OS で `npm run test:real-store-smoke` を再実行して直前確認を残すことである。
+- 残りは、追加した macOS / Windows hosted-runner smoke job の最初の成功を確認し、
+  `develop` / `main` の branch ruleset に required check を追加したうえで、
+  リリース候補に対する直前確認記録を更新することである。
 
 ## 7. 決定済み方針
 
 ### 7.1 real-store smoke の運用方針
 
-- v1 では `npm run test:real-store-smoke` を
-  初回リリース前の確認項目として扱い、PR ごとの常時 required CI には含めない。
+- `linux` は専用 helper script により GitHub-hosted Ubuntu 上で継続実行する。
+- `darwin` と `win32` も GitHub-hosted runner 上で
+  `npm run test:real-store-smoke` を継続実行し、
+  supported OS の native-store 契約確認を PR CI と release-prep に含める。
 - Linux の Secret Service 利用不可ケースは、
   平文フォールバック禁止を維持したまま README に前提条件と復旧手順を記載し、
-  手動確認または専用ジョブで扱う。
+  専用 helper job で扱う。
 
 ### 7.2 Secret Store 採用方針
 
@@ -186,10 +194,14 @@
 
 ### 8.1 初回リリース前に完了したい項目
 
-1. リリース候補に対して、`npm run format:check`、`npm run lint`、
-   `npm run typecheck`、`npm test`、`npm run build`、`npm run pack:smoke` を実行する。
-2. リリース作業を行う OS では、上記に加えて
-   `npm run test:real-store-smoke` も再実行し、直前確認を残す。
+1. 追加した `macos-real-store-smoke` と `windows-real-store-smoke` の
+  最初の GitHub-hosted runner 成功を確認する。
+2. `develop` / `main` の branch ruleset に
+  `macos-real-store-smoke` と `windows-real-store-smoke` を追加する。
+3. リリース候補に対して、`npm run format:check`、`npm run lint`、
+  `npm run typecheck`、`npm test`、`npm run build`、`npm run pack:smoke` を実行する。
+4. リリース作業を行う OS では、必要に応じて
+  `npm run test:real-store-smoke` も再実行し、直前確認を残す。
 
 ### 8.2 初回リリース判断の目安
 
@@ -199,13 +211,13 @@
   同梱 `dotenvx` 解決が維持されている。
 - Linux の Secret Service / `libsecret` 利用不可ケースの扱いが、
   README、`linux-secret-service.md`、または運用メモで明示されている。
-- PR CI の必須 gate と release 前の native-store 確認の役割分担が明示されている。
+- PR CI と `release-prep` の両方で、全対応 OS の native-store 確認が実行される。
+- `develop` / `main` の required status checks に
+  `macos-real-store-smoke` と `windows-real-store-smoke` が追加されている。
 
 ## 9. 初回リリース後の将来検討項目
 
-- GitHub Actions などでの継続 CI と required status checks の整備。
-- 実ストア smoke の OS マトリクス自動化。
-- 実ストア smoke を常時 PR CI に昇格させるかの再評価。
+- GitHub Actions の reusable workflow 化や重複削減。
 - ネイティブ依存の配布・保守性に関する懸念は、初回リリース後も継続して確認する。
 - `keytar` の保守継続性と、Node.js / OS 更新に対する追従状況の定期確認。
 - `darwin` / `linux` の real-store smoke や配布時トラブルが出た場合の、
