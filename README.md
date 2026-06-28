@@ -11,16 +11,7 @@ Use it when you want encrypted `.env` files from `dotenvx` without leaving
 
 Node.js 20 or newer is required.
 
-Use the published package directly:
-
-```bash
-npx dotenvx-keychain init
-npx dotenvx-keychain set HELLO world
-npx dotenvx-keychain get HELLO
-npx dotenvx-keychain run -- node app.js
-```
-
-Or add it to your project and use the shorter `dxk` binary:
+You can install `dotenvx-keychain` from npm:
 
 ```bash
 npm install --save-dev dotenvx-keychain
@@ -28,6 +19,15 @@ npx dxk init
 npx dxk set HELLO world
 npx dxk get HELLO
 npx dxk run -- node app.js
+```
+
+You can also invoke the published package directly for one-off usage:
+
+```bash
+npx dotenvx-keychain init
+npx dotenvx-keychain set HELLO world
+npx dotenvx-keychain get HELLO
+npx dotenvx-keychain run -- node app.js
 ```
 
 Use a custom shared ID when you want multiple checkouts or teammates to target

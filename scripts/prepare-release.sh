@@ -98,12 +98,13 @@ if [[ "$current_branch" == "main" ]]; then
 Release-candidate gate passed for $release_tag from main.
 
 Next steps:
-1. Confirm the manual win32 / darwin native-store sign-off is recorded.
+1. Confirm the hosted-runner release gate remains green and rerun `npm run test:real-store-smoke` locally if you want a final release-machine check before tagging.
 2. Create and push the release tag from the current main commit:
    git tag -a $release_tag -m "$release_tag"
    git push origin $release_tag
-3. Wait for the Release Prep workflow to finish and verify the uploaded tarball artifact.
-4. Run npm publish from this merged main commit after artifact verification.
+3. Wait for the Release Prep workflow to finish and confirm the uploaded tarball artifact is available.
+4. Confirm the follow-on Publish workflow succeeded for the same tag.
+5. If you want an extra dry run before tagging, use the manual Release Prep workflow_dispatch path; it reruns the hosted validation jobs and artifact upload, but the tag/version/mainline checks and follow-on Publish trigger only happen on tag pushes.
 EOF
 else
   cat <<EOF
@@ -116,7 +117,8 @@ Next steps:
    git pull --ff-only
    git tag -a $release_tag -m "$release_tag"
    git push origin $release_tag
-3. Wait for the Release Prep workflow to finish and verify the uploaded tarball artifact.
-4. Run npm publish from the merged main commit after artifact verification.
+3. Wait for the Release Prep workflow to finish and confirm the uploaded tarball artifact is available.
+4. Confirm the follow-on Publish workflow succeeded for the same tag.
+5. If you want an extra dry run before tagging, use the manual Release Prep workflow_dispatch path; it reruns the hosted validation jobs and artifact upload, but the tag/version/mainline checks and follow-on Publish trigger only happen on tag pushes.
 EOF
 fi
