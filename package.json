@@ -1,6 +1,6 @@
 {
   "name": "dotenvx-keychain",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "A thin, easy-to-adopt dotenvx wrapper that isolates decryption keys into your OS native secret store for local development.",
   "repository": {
     "type": "git",
